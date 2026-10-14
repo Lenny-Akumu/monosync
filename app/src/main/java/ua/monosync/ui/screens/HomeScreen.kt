@@ -80,6 +80,7 @@ import ua.monosync.ui.components.TxRow
 import ua.monosync.ui.components.dayOf
 import ua.monosync.ui.components.dayTitle
 import ua.monosync.ui.theme.LocalMoneyColors
+import ua.monosync.ui.theme.MonoRounded
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -123,7 +124,7 @@ fun HomeScreen(
         TopAppBar(
             title = {
                 Column {
-                    Text("MonoSync", style = MaterialTheme.typography.titleLarge)
+                    Text("monosync", style = TextStyle(fontFamily = MonoRounded, fontWeight = FontWeight.Black, fontSize = 26.sp, letterSpacing = (-0.3).sp))
                     settings.monoClientName?.let {
                         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }

@@ -1,5 +1,7 @@
 package ua.monosync.ui.theme
 
+import ua.monosync.R
+
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -16,6 +18,8 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -72,6 +76,9 @@ val AppShapes = Shapes(
 )
 
 val Numbers = TextStyle(fontFeatureSettings = "tnum")
+
+/** Rounded heavy face close to the mono wordmark (M PLUS Rounded 1c Black, OFL). */
+val MonoRounded = FontFamily(Font(R.font.mono_rounded, FontWeight.Black))
 
 @Composable
 fun MonoSyncTheme(dynamic: Boolean = true, content: @Composable () -> Unit) {

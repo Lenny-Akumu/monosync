@@ -48,3 +48,7 @@ APK збирає GitHub Actions (`.github/workflows/android.yml`) на коже�
 Логіка розбору сповіщень лежить в окремому модулі `core` з юніт-тестами на реальних прикладах.
 
 APK підписується ключем `keystore/monosync.jks`. Щоб використовувати власний ключ, задай змінні `MONOSYNC_KEYSTORE`, `MONOSYNC_KEYSTORE_PASSWORD`, `MONOSYNC_KEY_ALIAS` і `MONOSYNC_KEY_PASSWORD`.
+
+## Шрифт
+
+Заголовок і літера «m» на іконці використовують M PLUS Rounded 1c Black (SIL Open Font License). Це відкритий шрифт, найближчий до стилю логотипа monobank. Оригінальний шрифт банку не публічний.
