@@ -145,7 +145,7 @@ fun HomeScreen(
                     ActionCard(
                         icon = Icons.Rounded.NotificationsActive,
                         title = "Дай доступ до сповіщень",
-                        text = "Без цього MonoSync не бачить пушів Monobank. Android покаже попередження, це нормально: читаємо лише сповіщення Mono.",
+                        text = "Без цього MonoSync не бачить пушів Monobank, а читає він лише сповіщення Mono. Якщо перемикач сірий: Налаштування → Додатки → MonoSync → ⋮ → «Дозволити обмежені налаштування», і спробуй ще раз.",
                         action = "Відкрити налаштування",
                         onAction = onGrantListener,
                     )
