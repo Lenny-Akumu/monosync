@@ -22,13 +22,16 @@ android {
         versionName = "1.0.$buildNumber"
     }
 
+    val keystore = System.getenv("MONOSYNC_KEYSTORE")?.let { file(it) }?.takeIf { it.exists() }
+
     signingConfigs {
-        create("release") {
-            val envStore = System.getenv("MONOSYNC_KEYSTORE")
-            storeFile = if (envStore != null) file(envStore) else rootProject.file("keystore/monosync.jks")
-            storePassword = System.getenv("MONOSYNC_KEYSTORE_PASSWORD") ?: "monosync"
-            keyAlias = System.getenv("MONOSYNC_KEY_ALIAS") ?: "monosync"
-            keyPassword = System.getenv("MONOSYNC_KEY_PASSWORD") ?: "monosync"
+        if (keystore != null) {
+            create("release") {
+                storeFile = keystore
+                storePassword = System.getenv("MONOSYNC_KEYSTORE_PASSWORD") ?: "monosync"
+                keyAlias = System.getenv("MONOSYNC_KEY_ALIAS") ?: "monosync"
+                keyPassword = System.getenv("MONOSYNC_KEY_PASSWORD") ?: "monosync"
+            }
         }
     }
 
@@ -37,11 +40,11 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
         debug {
             applicationIdSuffix = ".debug"
-            signingConfig = signingConfigs.getByName("release")
+            signingConfigs.findByName("release")?.let { signingConfig = it }
         }
     }
 

@@ -6,3 +6,7 @@ local.properties
 .DS_Store
 captures/
 .kotlin/
+
+keystore/
+*.jks
+SIGNING_KEY_BASE64.txt
