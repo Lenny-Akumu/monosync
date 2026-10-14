@@ -9,6 +9,7 @@ import ua.monosync.core.Currency
 import ua.monosync.core.Direction
 import ua.monosync.core.Mcc
 import ua.monosync.core.NotificationParser
+import ua.monosync.core.ParsedNotification
 import ua.monosync.data.db.AccountEntity
 import ua.monosync.data.db.AppDatabase
 import ua.monosync.data.db.CategoryEntity
@@ -18,9 +19,12 @@ import ua.monosync.data.db.RuleEntity
 import ua.monosync.data.db.Source
 import ua.monosync.data.db.SyncState
 import ua.monosync.data.db.TransactionEntity
+import ua.monosync.data.db.JAR_TYPE
 import ua.monosync.data.db.cur
+import ua.monosync.data.db.isJar
 import ua.monosync.data.remote.MonoAccount
 import ua.monosync.data.remote.MonoApi
+import ua.monosync.data.remote.MonoJar
 import ua.monosync.data.remote.MonoStatementItem
 import java.security.MessageDigest
 import kotlin.math.abs
@@ -61,38 +65,14 @@ class Repository(
         val parsed = NotificationParser.parse(title, text) ?: return IngestResult.Ignored
         val settingsNow = settings.current()
 
-        var newAccount = false
-        val account = run {
-            val cardKey = parsed.cardKey
-            val existing = cardKey?.let { db.accounts().byKey(it) }.orEmpty()
-            existing.firstOrNull { it.confirmed } ?: existing.firstOrNull() ?: run {
-                val all = db.accounts().all()
-                if (cardKey == null) {
-                    all.firstOrNull { it.id == settingsNow.primaryAccountId }
-                        ?: all.firstOrNull { it.confirmed && it.cur == (parsed.currency ?: Currency.UAH) }
-                        ?: all.firstOrNull { it.confirmed }
-                } else null
-            } ?: run {
-                newAccount = true
-                val k = cardKey ?: "картк"
-                val currency = CardKeys.guessCurrency(k) ?: parsed.currency ?: Currency.UAH
-                AccountEntity(
-                    id = "card:$k",
-                    name = parsed.cardPhrase?.let { CardKeys.displayName(it) } ?: "Картка Mono",
-                    cardKey = k,
-                    type = CardKeys.guessType(k),
-                    currency = currency.iso,
-                    confirmed = false,
-                ).also { db.accounts().upsert(it) }
-            }
-        }
+        if (parsed.jarName != null) return ingestJar(parsed, rawId, postedAt, title, text, settingsNow)
+
+        val (account, newAccount) = resolveCard(parsed, settingsNow)
 
         val amountAbs = parsed.accountAmountMinor(account.cur)
         val signed = if (parsed.direction == Direction.IN) amountAbs else -amountAbs
         val kind = if (signed > 0) Kind.INCOME else Kind.EXPENSE
-        val description = parsed.description
-            ?: parsed.jarName?.let { "Банка «$it»" }
-            ?: if (signed > 0) "Поповнення" else "Переказ з картки"
+        val description = parsed.description ?: if (signed > 0) "Поповнення" else "Переказ з картки"
         val operation = parsed.currency?.takeIf { it != account.cur }
 
         val tx = TransactionEntity(
@@ -120,6 +100,113 @@ class Repository(
         val saved = db.transactions().byId(id) ?: tx.copy(id = id)
         val merged = mergeOwnTransfer(saved)
         IngestResult.Recorded(merged, db.accounts().byId(account.id) ?: account, newAccount)
+    }
+
+    /** Finds the card a notification talks about, or creates a placeholder for a card we have not seen. */
+    private suspend fun resolveCard(parsed: ParsedNotification, s: AppSettings, guessIfUnnamed: Boolean = true): Pair<AccountEntity, Boolean> {
+        val cardKey = parsed.cardKey
+        val existing = cardKey?.let { db.accounts().byKey(it) }.orEmpty()
+        existing.firstOrNull { it.confirmed }?.let { return it to false }
+        existing.firstOrNull()?.let { return it to false }
+        if (cardKey == null && guessIfUnnamed) {
+            val cards = db.accounts().all().filter { !it.isJar && !it.hidden }
+            val guess = cards.firstOrNull { it.id == s.primaryAccountId }
+                ?: cards.firstOrNull { it.confirmed && it.cur == (parsed.currency ?: Currency.UAH) }
+                ?: cards.firstOrNull { it.confirmed }
+            if (guess != null) return guess to false
+        }
+        val k = cardKey ?: "картк"
+        val currency = CardKeys.guessCurrency(k) ?: parsed.currency ?: Currency.UAH
+        val created = AccountEntity(
+            id = "card:$k",
+            name = parsed.cardPhrase?.let { CardKeys.displayName(it) } ?: "Картка Mono",
+            cardKey = k,
+            type = CardKeys.guessType(k),
+            currency = currency.iso,
+            confirmed = false,
+        )
+        db.accounts().upsert(created)
+        return created to true
+    }
+
+    private suspend fun resolveJar(parsed: ParsedNotification): Pair<AccountEntity, Boolean> {
+        val key = parsed.jarKey!!
+        val existing = db.accounts().byKey(key)
+        existing.firstOrNull { it.confirmed }?.let { return it to false }
+        existing.firstOrNull()?.let { return it to false }
+        val jar = AccountEntity(
+            id = key,
+            name = "Банка «${parsed.jarName}»",
+            cardKey = key,
+            type = JAR_TYPE,
+            currency = (parsed.currency ?: Currency.UAH).iso,
+            confirmed = false,
+        )
+        db.accounts().upsert(jar)
+        return jar to true
+    }
+
+    /** Jar operations: own top-ups and withdrawals are transfers, someone else's top-up is income of the jar. */
+    private suspend fun ingestJar(
+        parsed: ParsedNotification,
+        rawId: Long,
+        postedAt: Long,
+        title: String?,
+        text: String?,
+        s: AppSettings,
+    ): IngestResult {
+        val (jar, newJar) = resolveJar(parsed)
+        val intoJar = parsed.jarFlow != Direction.OUT
+        val amount = parsed.amountMinor
+
+        val jarBalance = parsed.jarBalanceMinor
+            ?: jar.balance?.let { if (intoJar) it + amount else it - amount }
+        if (jarBalance != null) db.accounts().upsert(jar.copy(balance = jarBalance, updatedAt = postedAt))
+
+        val card = if (parsed.externalJarTopUp) null else resolveCard(parsed, s)
+        val raw = listOfNotNull(title, text).joinToString("\n")
+        val tx = if (card != null) {
+            val (acc, _) = card
+            TransactionEntity(
+                accountId = acc.id,
+                transferAccountId = jar.id,
+                time = postedAt,
+                amount = if (intoJar) -amount else amount,
+                currency = acc.currency,
+                description = parsed.description ?: if (intoJar) "Поповнення банки «${parsed.jarName}»" else "З банки «${parsed.jarName}»",
+                kind = Kind.TRANSFER,
+                balanceAfter = parsed.balanceMinor.takeIf { parsed.cardKey != null },
+                comment = parsed.notes.joinToString("\n").ifBlank { null },
+                source = Source.NOTIFICATION,
+                rawText = raw,
+                syncState = initialSyncState(acc, postedAt, s),
+            )
+        } else {
+            TransactionEntity(
+                accountId = jar.id,
+                time = postedAt,
+                amount = if (intoJar) amount else -amount,
+                currency = jar.currency,
+                description = parsed.counterpartPhrase?.let { "Від $it" } ?: "Поповнення банки «${parsed.jarName}»",
+                kind = if (intoJar) Kind.INCOME else Kind.EXPENSE,
+                balanceAfter = jarBalance,
+                source = Source.NOTIFICATION,
+                rawText = raw,
+                syncState = initialSyncState(jar, postedAt, s),
+            )
+        }
+        val id = db.transactions().insert(tx)
+        db.raw().mark(rawId, true, id)
+        card?.first?.let { acc ->
+            if (parsed.cardKey != null && parsed.balanceMinor != null) db.accounts().upsert(acc.copy(balance = parsed.balanceMinor, updatedAt = postedAt))
+        }
+        val newCard = card?.second == true
+        val reported = when {
+            newJar -> db.accounts().byId(jar.id) ?: jar
+            card != null -> db.accounts().byId(card.first.id) ?: card.first
+            else -> db.accounts().byId(jar.id) ?: jar
+        }
+        return IngestResult.Recorded(db.transactions().byId(id) ?: tx.copy(id = id), reported, newJar || newCard)
     }
 
     private fun notionActive(s: AppSettings) = s.notionEnabled && s.notionStartAt > 0
@@ -250,7 +337,41 @@ class Repository(
         val known = db.accounts().all()
         val newOnes = mutableListOf<AccountEntity>()
         info.accounts.forEachIndexed { index, a -> upsertApiAccount(a, index, known)?.let(newOnes::add) }
+        info.jars.forEachIndexed { index, j -> upsertApiJar(j, 100 + index, known)?.let(newOnes::add) }
         return newOnes
+    }
+
+    private suspend fun upsertApiJar(j: MonoJar, index: Int, known: List<AccountEntity>): AccountEntity? {
+        val title = j.title?.trim().orEmpty().ifBlank { "Банка" }
+        val key = CardKeys.jarKey(title)
+        val byId = known.firstOrNull { it.id == j.id }
+        if (byId != null) {
+            db.accounts().upsert(byId.copy(balance = j.balance, goal = j.goal, cardKey = key, updatedAt = System.currentTimeMillis()))
+            return null
+        }
+        val placeholder = known.firstOrNull { !it.fromApi && it.cardKey == key }
+        val entity = AccountEntity(
+            id = j.id,
+            name = placeholder?.name ?: "Банка «$title»",
+            cardKey = key,
+            type = JAR_TYPE,
+            currency = j.currencyCode,
+            balance = j.balance,
+            goal = j.goal,
+            confirmed = placeholder?.confirmed ?: false,
+            hidden = placeholder?.hidden ?: false,
+            fromApi = true,
+            notionAccountId = placeholder?.notionAccountId,
+            sortOrder = index,
+        )
+        db.accounts().upsert(entity)
+        if (placeholder != null) {
+            db.transactions().moveAccount(placeholder.id, entity.id)
+            db.transactions().moveTransferAccount(placeholder.id, entity.id)
+            db.accounts().delete(placeholder.id)
+            return null
+        }
+        return entity
     }
 
     private suspend fun upsertApiAccount(a: MonoAccount, index: Int, known: List<AccountEntity>): AccountEntity? {
@@ -336,6 +457,13 @@ class Repository(
             .sortedBy { abs(it.time - time) }
         val match = candidates.firstOrNull()
         val apiDescription = item.description.trim().ifBlank { null }
+
+        if (match == null) {
+            // The other side of a transfer we already recorded on another account (card -> jar and back).
+            val mirrored = db.transactions().transfersTouching(account.id, time - 15 * 60_000L, time + 15 * 60_000L)
+                .any { t -> (t.amount > 0) != (item.amount > 0) && abs(abs(t.amount) - abs(item.amount)) <= maxOf(2L, abs(item.amount) / 100) }
+            if (mirrored) return false
+        }
 
         if (match != null) {
             val takeDescription = match.genericDescription && apiDescription != null && !match.userEdited

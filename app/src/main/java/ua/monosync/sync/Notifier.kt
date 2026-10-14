@@ -16,6 +16,7 @@ import ua.monosync.core.Money
 import ua.monosync.data.db.AccountEntity
 import ua.monosync.data.db.TransactionEntity
 import ua.monosync.data.db.cur
+import ua.monosync.data.db.isJar
 import ua.monosync.ui.MainActivity
 
 object Notifier {
@@ -55,7 +56,7 @@ object Notifier {
         if (!allowed(context)) return
         val n = NotificationCompat.Builder(context, CH_ACCOUNTS)
             .setSmallIcon(R.drawable.ic_stat_mono)
-            .setContentTitle("Знайдено нову картку")
+            .setContentTitle(if (account.isJar) "Знайдено нову банку" else "Знайдено нову картку")
             .setContentText("${account.name} (${account.cur.code}). Натисни, щоб підтвердити.")
             .setAutoCancel(true)
             .setContentIntent(open(context, "confirm_account" to account.id))

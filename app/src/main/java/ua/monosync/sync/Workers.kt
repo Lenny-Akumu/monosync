@@ -14,6 +14,7 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import kotlinx.coroutines.delay
 import ua.monosync.app
+import ua.monosync.data.db.isJar
 import ua.monosync.data.remote.ApiException
 import ua.monosync.widget.BalanceWidget
 import java.util.concurrent.TimeUnit
@@ -76,7 +77,11 @@ class MonoWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             accounts.forEachIndexed { i, acc ->
                 if (i > 0) delay(61_000)
                 val since = if (full || acc.lastStatementAt == 0L) historyStart else acc.lastStatementAt - 2 * 3600_000L
-                repo.syncStatement(acc, since)
+                try {
+                    repo.syncStatement(acc, since)
+                } catch (e: ApiException) {
+                    if (!acc.isJar || e.code == 429 || e.code == 401) throw e
+                }
             }
             repo.settings.setMonoStatus(null)
             BalanceWidget.refresh(applicationContext)

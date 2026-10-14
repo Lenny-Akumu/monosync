@@ -10,6 +10,8 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Update
 import androidx.room.Upsert
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -58,6 +60,12 @@ interface TransactionDao {
 
     @Query("SELECT * FROM transactions WHERE deleted = 0 AND time BETWEEN :from AND :to AND kind != 'TRANSFER'")
     suspend fun around(from: Long, to: Long): List<TransactionEntity>
+
+    @Query(
+        "SELECT * FROM transactions WHERE deleted = 0 AND kind = 'TRANSFER' AND transferAccountId = :accountId " +
+            "AND time BETWEEN :from AND :to"
+    )
+    suspend fun transfersTouching(accountId: String, from: Long, to: Long): List<TransactionEntity>
 
     @Query("SELECT * FROM transactions WHERE syncState IN ('PENDING','ERROR') ORDER BY time")
     suspend fun pendingSync(): List<TransactionEntity>
@@ -152,7 +160,7 @@ interface RawDao {
 
 @Database(
     entities = [AccountEntity::class, TransactionEntity::class, CategoryEntity::class, RuleEntity::class, RawNotificationEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -165,7 +173,14 @@ abstract class AppDatabase : RoomDatabase() {
     companion object {
         fun create(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "monosync.db")
+                .addMigrations(MIGRATION_1_2)
                 .fallbackToDestructiveMigration()
                 .build()
+    }
+}
+
+val MIGRATION_1_2 = object : Migration(1, 2) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE accounts ADD COLUMN goal INTEGER")
     }
 }

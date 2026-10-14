@@ -41,6 +41,7 @@ import androidx.compose.material.icons.rounded.LocalTaxi
 import androidx.compose.material.icons.rounded.Payments
 import androidx.compose.material.icons.rounded.Pets
 import androidx.compose.material.icons.rounded.Redeem
+import androidx.compose.material.icons.rounded.Savings
 import androidx.compose.material.icons.rounded.School
 import androidx.compose.material.icons.rounded.Smartphone
 import androidx.compose.material.icons.rounded.SportsEsports
@@ -81,6 +82,7 @@ import ua.monosync.data.db.Kind
 import ua.monosync.data.db.SyncState
 import ua.monosync.data.db.TransactionEntity
 import ua.monosync.data.db.cur
+import ua.monosync.data.db.isJar
 import ua.monosync.ui.theme.LocalMoneyColors
 import java.time.Instant
 import java.time.LocalDate
@@ -173,7 +175,7 @@ fun TxRow(
         colors = ListItemDefaults.colors(containerColor = scheme.surfaceContainerLow),
         leadingContent = {
             IconBadge(
-                iconFor(tx, category),
+                if (tx.kind == Kind.TRANSFER && (transferTo?.isJar == true || account?.isJar == true)) Icons.Rounded.Savings else iconFor(tx, category),
                 if (tx.kind == Kind.INCOME) scheme.tertiaryContainer else scheme.secondaryContainer,
                 if (tx.kind == Kind.INCOME) scheme.onTertiaryContainer else scheme.onSecondaryContainer,
             )

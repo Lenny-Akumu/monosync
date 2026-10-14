@@ -32,6 +32,7 @@ import androidx.compose.material.icons.rounded.CreditCard
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.NewReleases
 import androidx.compose.material.icons.rounded.NotificationsActive
+import androidx.compose.material.icons.rounded.Savings
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material3.AssistChip
@@ -71,6 +72,8 @@ import ua.monosync.data.db.Kind
 import ua.monosync.data.db.TransactionEntity
 import ua.monosync.data.db.available
 import ua.monosync.data.db.cur
+import ua.monosync.data.db.isJar
+import ua.monosync.ui.components.ProgressLine
 import ua.monosync.ui.components.SectionLabel
 import ua.monosync.ui.components.NotionLogo
 import ua.monosync.ui.components.TxRow
@@ -104,7 +107,8 @@ fun HomeScreen(
     val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val accById = remember(accounts) { accounts.associateBy { it.id } }
     val catById = remember(categories) { categories.associateBy { it.id } }
-    val visible = accounts.filter { it.confirmed && !it.hidden }
+    val jars = accounts.filter { it.isJar && it.confirmed && !it.hidden }
+    val visible = accounts.filter { it.confirmed && !it.hidden && !it.isJar }
         .sortedByDescending { it.id == settings.primaryAccountId }
     val unconfirmed = accounts.filter { !it.confirmed && !it.hidden }
 
@@ -157,7 +161,7 @@ fun HomeScreen(
             items(unconfirmed, key = { "new_" + it.id }) { acc ->
                 ActionCard(
                     icon = Icons.Rounded.NewReleases,
-                    title = "Нова картка: ${acc.name}",
+                    title = if (acc.isJar) "Нова банка: ${acc.name}" else "Нова картка: ${acc.name}",
                     text = "${acc.cur.code}${acc.maskedPan?.let { " · ${it.takeLast(4)}" } ?: ""}. Підтверди її, і операції почнуть потрапляти в облік та Notion.",
                     action = "Підтвердити",
                     onAction = { onConfirmAccount(acc) },
@@ -175,7 +179,17 @@ fun HomeScreen(
                     }
                     Spacer(Modifier.height(12.dp))
                 }
-            } else if (unconfirmed.isEmpty()) {
+            }
+            if (jars.isNotEmpty()) {
+                item {
+                    SectionLabel("Банки")
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(end = 8.dp)) {
+                        items(jars, key = { it.id }) { jar -> JarCard(jar, onClick = { onOpenAccount(jar) }) }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                }
+            }
+            if (visible.isEmpty() && jars.isEmpty() && unconfirmed.isEmpty()) {
                 item {
                     EmptyHero(monoConnected, onOpenMono)
                     Spacer(Modifier.height(12.dp))
@@ -261,6 +275,35 @@ private fun BalanceCard(acc: AccountEntity, primary: Boolean, onClick: () -> Uni
                 else -> acc.cur.code
             }
             Text(sub, style = MaterialTheme.typography.bodySmall, color = content.copy(alpha = 0.8f), maxLines = 1)
+        }
+    }
+}
+
+@Composable
+private fun JarCard(jar: AccountEntity, onClick: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Card(
+        onClick = onClick,
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = scheme.tertiaryContainer, contentColor = scheme.onTertiaryContainer),
+        modifier = Modifier.width(176.dp),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.Savings, null, Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(jar.name.removePrefix("Банка ").trim('«', '»'), style = MaterialTheme.typography.labelLarge, maxLines = 1)
+            }
+            Text(
+                jar.balance?.let { Money.formatShort(it, jar.cur) } ?: "—",
+                style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.SemiBold, fontFeatureSettings = "tnum"),
+                maxLines = 1,
+            )
+            val goal = jar.goal
+            if (goal != null && goal > 0) {
+                ProgressLine((jar.balance ?: 0).toFloat() / goal, scheme.tertiary)
+                Text("ціль ${Money.formatShort(goal, jar.cur)}", style = MaterialTheme.typography.labelSmall, color = scheme.onTertiaryContainer.copy(alpha = 0.8f))
+            }
         }
     }
 }

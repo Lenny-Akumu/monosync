@@ -61,7 +61,41 @@ class NotificationParserTest {
         val p = NotificationParser.parse("🫙 500.00₴", "На банку «Відпустка»")!!
         assertEquals(Direction.OUT, p.direction)
         assertEquals("Відпустка", p.jarName)
-        assertEquals("Банка «Відпустка»", p.description)
+        assertEquals("Поповнення банки «Відпустка»", p.description)
+        assertEquals(Direction.IN, p.jarFlow)
+        assertEquals("jar:відпустка", p.jarKey)
+    }
+
+    @Test
+    fun jarTopUpFromCardWithJarBalance() {
+        val p = NotificationParser.parse(
+            "Поповнення банки «Відпустка»",
+            "−500.00₴\nЗ Чорної картки\nУ банці вже 3 500.00₴\nБаланс 20 000.00₴",
+        )!!
+        assertEquals(50000L, p.amountMinor)
+        assertEquals("Відпустка", p.jarName)
+        assertEquals(Direction.IN, p.jarFlow)
+        assertEquals(Direction.OUT, p.direction)
+        assertEquals("чорн", p.cardKey)
+        assertEquals(350000L, p.jarBalanceMinor)
+        assertEquals(2000000L, p.balanceMinor)
+    }
+
+    @Test
+    fun someoneToppedUpJar() {
+        val p = NotificationParser.parse("🫙 +200.00₴", "Від: Олена К.\nНа банку «Подарунок»")!!
+        assertEquals(Direction.IN, p.jarFlow)
+        assertEquals(true, p.externalJarTopUp)
+        assertEquals("Подарунок", p.jarName)
+    }
+
+    @Test
+    fun moneyFromJarToCard() {
+        val p = NotificationParser.parse("З банки «Відпустка»", "+1 000.00₴\nНа Чорну картку")!!
+        assertEquals(Direction.OUT, p.jarFlow)
+        assertEquals(Direction.IN, p.direction)
+        assertEquals("чорн", p.cardKey)
+        assertEquals(100000L, p.amountMinor)
     }
 
     @Test

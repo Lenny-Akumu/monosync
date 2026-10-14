@@ -42,6 +42,7 @@ data class AccountEntity(
     val lastStatementAt: Long = 0,
     val sortOrder: Int = 0,
     val updatedAt: Long = System.currentTimeMillis(),
+    val goal: Long? = null,
 )
 
 @Entity(
@@ -106,3 +107,6 @@ data class RawNotificationEntity(
 val AccountEntity.cur: Currency get() = Currency.byIso(currency) ?: Currency.UAH
 val TransactionEntity.cur: Currency get() = Currency.byIso(currency) ?: Currency.UAH
 val AccountEntity.available: Long? get() = balance?.let { it + creditLimit }
+val AccountEntity.isJar: Boolean get() = type == JAR_TYPE
+
+const val JAR_TYPE = "jar"

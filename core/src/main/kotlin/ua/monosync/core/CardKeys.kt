@@ -14,6 +14,8 @@ object CardKeys {
                 if (ending != null) word.dropLast(ending.length) else word
             }
 
+    fun jarKey(name: String): String = "jar:" + name.lowercase().replace(Regex("[^\\p{L}\\p{N}]+"), " ").trim()
+
     /** Nominative display name: "Білої" -> "Біла картка". */
     fun displayName(phrase: String): String {
         val key = normalize(phrase)

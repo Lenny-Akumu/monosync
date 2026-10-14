@@ -32,6 +32,7 @@ import ua.monosync.core.Currency
 import ua.monosync.data.NotionAccount
 import ua.monosync.data.db.AccountEntity
 import ua.monosync.data.db.cur
+import ua.monosync.data.db.isJar
 import ua.monosync.ui.components.SelectDialog
 import ua.monosync.ui.components.SettingRow
 
@@ -61,12 +62,12 @@ fun AccountDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (confirming) "Нова картка" else "Картка") },
+        title = { Text(if (account.isJar) (if (confirming) "Нова банка" else "Банка") else if (confirming) "Нова картка" else "Картка") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (confirming) {
                     Text(
-                        "MonoSync побачив цю картку ${if (account.fromApi) "у Monobank API" else "у сповіщенні"}. Перевір назву й валюту.",
+                        "MonoSync побачив ${if (account.isJar) "цю банку" else "цю картку"} ${if (account.fromApi) "у Monobank API" else "у сповіщенні"}. Перевір назву й валюту.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

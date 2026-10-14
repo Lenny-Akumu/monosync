@@ -10,11 +10,18 @@ data class ParsedNotification(
     val cardPhrase: String?,
     val cardKey: String?,
     val jarName: String?,
+    val jarFlow: Direction?,
+    val jarBalanceMinor: Long?,
     val counterpartPhrase: String?,
     val balanceMinor: Long?,
     val rate: Double?,
     val notes: List<String>,
 ) {
+    val jarKey: String? get() = jarName?.let { CardKeys.jarKey(it) }
+
+    /** Someone else put money into the jar, no own card involved. */
+    val externalJarTopUp: Boolean get() = jarName != null && cardPhrase == null && counterpartPhrase != null && jarFlow == Direction.IN
+
     /** Amount in the card's own currency, when the operation went through a conversion. */
     fun accountAmountMinor(accountCurrency: Currency?): Long {
         if (rate == null || rate <= 0.0 || accountCurrency == null || currency == null) return amountMinor
@@ -36,6 +43,16 @@ object NotificationParser {
         setOf(RegexOption.IGNORE_CASE),
     )
     private val jarRx = Regex("^(з|із|зі|на|до|у|в)\\s+банк[иуа]\\s*[«\"“]?(.+?)[»\"”]?\\s*$", RegexOption.IGNORE_CASE)
+    private val jarQuoted = Regex(
+        "(?:(з|із|зі|на|до|у|в)\\s+)?банк(?:а|и|у|і|ою)\\s*[«\"“„]([^»\"”“„]+)[»\"”“]",
+        RegexOption.IGNORE_CASE,
+    )
+    private val jarBalanceRx = Regex(
+        "(?:(?:у|в)\\s+банці(?:\\s*[«\"“][^»\"”]+[»\"”])?|накопичено|баланс банки)\\s*:?\\s*(?:вже\\s*)?([+\\-−–]?)\\s?$NUM\\s?$CUR?",
+        RegexOption.IGNORE_CASE,
+    )
+    private val jarInWords = Regex("(поповнен|поклали|відклад|переказ на банку)", RegexOption.IGNORE_CASE)
+    private val jarOutWords = Regex("(знят|вивели|переказ з банки)", RegexOption.IGNORE_CASE)
     private val fromRx = Regex("^(від|from)\\s*:?\\s*(.+)$", RegexOption.IGNORE_CASE)
     private val toRx = Regex("^(кому|отримувач|to)\\s*:?\\s*(.+)$", RegexOption.IGNORE_CASE)
     private val noteRx = Regex("^(кредитний ліміт|кешбек|cashback|комісія|ліміт|бонус)", RegexOption.IGNORE_CASE)
@@ -62,6 +79,9 @@ object NotificationParser {
         var cardPreposition: String? = null
         var jar: String? = null
         var jarPreposition: String? = null
+        var jarBalance: Long? = null
+        var jarIn = false
+        var jarOut = false
         var counterpart: String? = null
         var amountLineRest: String? = null
         var incomeHint = false
@@ -71,6 +91,20 @@ object NotificationParser {
         for (raw in lines) {
             if (incomeWords.containsMatchIn(raw)) incomeHint = true
             var line = raw
+
+            jarBalanceRx.find(line)?.let { b ->
+                jarBalance = Money.parseMinor(b.groupValues[1] + b.groupValues[2])
+                line = line.replace(b.value, " ")
+            }
+            jarQuoted.find(line)?.let { j ->
+                jar = clean(j.groupValues[2])
+                if (j.groupValues[1].isNotEmpty()) jarPreposition = j.groupValues[1].lowercase()
+                if (jarInWords.containsMatchIn(line)) jarIn = true
+                if (jarOutWords.containsMatchIn(line)) jarOut = true
+                line = line.replace(j.value, " ")
+                    .replace(Regex("(?i)(поповнення|зняття|переказ)"), " ")
+            }
+            if (clean(line).isEmpty()) continue
 
             balance.find(line)?.let { b ->
                 balanceMinor = Money.parseMinor(b.groupValues[1] + b.groupValues[2])
@@ -141,7 +175,16 @@ object NotificationParser {
         val amt = amount ?: return null
         if (amt == 0L) return null
 
+        val jarFlow = jar?.let {
+            when {
+                jarOut || jarPreposition in setOf("з", "із", "зі") -> Direction.OUT
+                jarIn || jarPreposition != null -> Direction.IN
+                else -> Direction.IN
+            }
+        }
+
         val direction = when {
+            jar != null && cardPreposition == null && counterpart == null -> if (jarFlow == Direction.IN) Direction.OUT else Direction.IN
             sign == "+" -> Direction.IN
             sign == "-" || sign == "−" || sign == "–" -> Direction.OUT
             cardPreposition == "на" || cardPreposition == "до" -> Direction.IN
@@ -155,7 +198,7 @@ object NotificationParser {
         val description = amountLineRest?.takeIf { it.length > 1 }
             ?: descCandidates.firstOrNull { it.length > 1 }
             ?: counterpart
-            ?: jar?.let { if (direction == Direction.OUT) "Банка «$it»" else "З банки «$it»" }
+            ?: jar?.let { if (jarFlow == Direction.IN) "Поповнення банки «$it»" else "З банки «$it»" }
 
         return ParsedNotification(
             amountMinor = amt,
@@ -165,6 +208,8 @@ object NotificationParser {
             cardPhrase = cardPhrase,
             cardKey = cardPhrase?.let { CardKeys.normalize(it) },
             jarName = jar,
+            jarFlow = jarFlow,
+            jarBalanceMinor = jarBalance,
             counterpartPhrase = counterpart,
             balanceMinor = balanceMinor,
             rate = rate,

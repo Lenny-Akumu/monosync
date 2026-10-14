@@ -21,6 +21,7 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.HelpOutline
+import androidx.compose.material.icons.rounded.Savings
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.AssistChip
@@ -50,6 +51,7 @@ import ua.monosync.data.db.CategoryEntity
 import ua.monosync.data.db.RawNotificationEntity
 import ua.monosync.data.db.RuleEntity
 import ua.monosync.data.db.cur
+import ua.monosync.data.db.isJar
 import ua.monosync.ui.components.Group
 import ua.monosync.ui.components.GroupDivider
 import ua.monosync.ui.components.SectionLabel
@@ -65,7 +67,7 @@ fun AccountsScreen(
     onOpen: (AccountEntity) -> Unit,
 ) {
     SubScreen("Картки й рахунки", onBack) {
-        Hint("Картки знаходяться самі: зі сповіщень або з Monobank API. Нову картку треба підтвердити один раз, і для неї можна вибрати рахунок у Notion.")
+        Hint("Картки й банки знаходяться самі: зі сповіщень або з Monobank API. Нову картку треба підтвердити один раз, і для неї можна вибрати рахунок у Notion.")
         val groups = listOf(
             "Активні" to accounts.filter { it.confirmed && !it.hidden },
             "Очікують підтвердження" to accounts.filter { !it.confirmed && !it.hidden },
@@ -83,6 +85,7 @@ fun AccountsScreen(
                             acc.id == settings.primaryAccountId -> Icons.Rounded.Star
                             acc.hidden -> Icons.Rounded.VisibilityOff
                             !acc.confirmed -> Icons.Rounded.HelpOutline
+                            acc.isJar -> Icons.Rounded.Savings
                             else -> Icons.Rounded.CreditCard
                         },
                         acc.name,

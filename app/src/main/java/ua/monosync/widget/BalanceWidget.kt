@@ -29,6 +29,7 @@ import ua.monosync.app
 import ua.monosync.core.Money
 import ua.monosync.data.db.Kind
 import ua.monosync.data.db.cur
+import ua.monosync.data.db.isJar
 import ua.monosync.ui.MainActivity
 import java.time.LocalDate
 import java.time.ZoneId
@@ -38,7 +39,7 @@ class BalanceWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val repo = context.app.repo
         val s = repo.settings.current()
-        val accounts = repo.db.accounts().all().filter { it.confirmed && !it.hidden }
+        val accounts = repo.db.accounts().all().filter { it.confirmed && !it.hidden && !it.isJar }
         val primary = accounts.firstOrNull { it.id == s.primaryAccountId } ?: accounts.firstOrNull()
         val zone = ZoneId.systemDefault()
         val monthStart = LocalDate.now().withDayOfMonth(1).atStartOfDay(zone).toInstant().toEpochMilli()
