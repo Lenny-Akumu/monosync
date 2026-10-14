@@ -34,6 +34,7 @@ import androidx.compose.material.icons.rounded.NewReleases
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Savings
 import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.Subscriptions
 import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
@@ -68,6 +69,7 @@ import ua.monosync.core.Money
 import ua.monosync.data.AppSettings
 import ua.monosync.data.db.AccountEntity
 import ua.monosync.data.db.CategoryEntity
+import ua.monosync.data.db.SubscriptionEntity
 import ua.monosync.data.db.Kind
 import ua.monosync.data.db.TransactionEntity
 import ua.monosync.data.db.available
@@ -104,6 +106,8 @@ fun HomeScreen(
     onOpenNotion: () -> Unit,
     onOpenMono: () -> Unit,
     onSeeAll: () -> Unit,
+    subscriptions: List<SubscriptionEntity> = emptyList(),
+    onOpenSubscriptions: () -> Unit = {},
 ) {
     val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val accById = remember(accounts) { accounts.associateBy { it.id } }
@@ -210,6 +214,11 @@ fun HomeScreen(
                 }
                 Spacer(Modifier.height(8.dp))
                 NotionChip(settings, pendingCount, onOpenNotion)
+                val soon = subscriptions.filter { it.nextCharge < System.currentTimeMillis() + 7 * 24 * 3600_000L }.take(3)
+                if (soon.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    UpcomingCard(soon, onOpenSubscriptions)
+                }
             }
 
             val recent = transactions.filter { !(accById[it.accountId]?.hidden ?: false) }.take(40)
@@ -276,6 +285,36 @@ private fun BalanceCard(acc: AccountEntity, primary: Boolean, onClick: () -> Uni
                 else -> acc.cur.code
             }
             Text(sub, style = MaterialTheme.typography.bodySmall, color = content.copy(alpha = 0.8f), maxLines = 1)
+        }
+    }
+}
+
+@Composable
+private fun UpcomingCard(subs: List<SubscriptionEntity>, onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.Subscriptions, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(8.dp))
+                Text("Найближчі списання", style = MaterialTheme.typography.titleSmall)
+            }
+            subs.forEach { s ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(s.name, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+                        Text(dueText(s), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Text(
+                        Money.format(s.amount, Currency.byIso(s.currency)),
+                        style = MaterialTheme.typography.titleSmall.merge(TextStyle(fontFeatureSettings = "tnum")),
+                    )
+                }
+            }
         }
     }
 }

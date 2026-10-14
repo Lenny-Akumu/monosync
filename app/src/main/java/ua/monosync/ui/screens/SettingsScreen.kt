@@ -28,6 +28,7 @@ import androidx.compose.material.icons.rounded.CreditCard
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.Subscriptions
 import androidx.compose.material.icons.rounded.TaskAlt
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material.icons.rounded.Widgets
@@ -60,6 +61,8 @@ fun SettingsScreen(
     onAccounts: () -> Unit,
     onCategories: () -> Unit,
     onLog: () -> Unit,
+    onSubscriptions: () -> Unit,
+    subscriptionsCount: Int,
     onDynamicColor: (Boolean) -> Unit,
     onNotifyOnRecord: (Boolean) -> Unit,
 ) {
@@ -118,6 +121,13 @@ fun SettingsScreen(
             SettingRow(Icons.Rounded.CreditCard, "Картки й рахунки", "Знайдено: $accountsCount", trailing = chevron, onClick = onAccounts)
             GroupDivider()
             SettingRow(Icons.Rounded.Category, "Категорії та правила", "Звідки беруться категорії і чого навчився застосунок", trailing = chevron, onClick = onCategories)
+            GroupDivider()
+            SettingRow(
+                Icons.Rounded.Subscriptions, "Підписки",
+                if (subscriptionsCount == 0) "Регулярні списання й нагадування" else "Знайдено: $subscriptionsCount · нагадування " +
+                    if (settings.subRemindersOn) "за ${settings.subRemindDays} дн." else "вимкнені",
+                trailing = chevron, onClick = onSubscriptions,
+            )
             GroupDivider()
             SettingRow(Icons.AutoMirrored.Rounded.ReceiptLong, "Журнал сповіщень", "Сирі тексти від Mono, щоб перевірити розпізнавання", trailing = chevron, onClick = onLog)
         }

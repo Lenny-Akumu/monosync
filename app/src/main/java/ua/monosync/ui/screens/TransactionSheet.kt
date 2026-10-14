@@ -93,6 +93,7 @@ fun TransactionSheet(
     budgetCurrency: Currency = Currency.UAH,
     notionCategories: Boolean = false,
     onCreateCategory: (String, Long?, String?, (String) -> Unit) -> Unit = { _, _, _, _ -> },
+    onMarkSubscription: ((TransactionEntity) -> Unit)? = null,
 ) {
     var newCategory by remember { mutableStateOf(false) }
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -275,6 +276,9 @@ fun TransactionSheet(
                 }
                 if (notionEnabled && initial.syncState != SyncState.SYNCED && account?.confirmed == true) {
                     TextButton(onClick = { onResend(initial); onDismiss() }) { Text("Надіслати в Notion") }
+                }
+                if (onMarkSubscription != null && initial.kind == Kind.EXPENSE) {
+                    TextButton(onClick = { onMarkSubscription(initial); onDismiss() }) { Text("Це підписка") }
                 }
             }
 

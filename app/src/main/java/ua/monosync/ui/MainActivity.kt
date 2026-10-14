@@ -50,10 +50,12 @@ class MainActivity : ComponentActivity() {
         intent ?: return
         intent.getStringExtra("confirm_account")?.let { deepLink.value = DeepLink.Account(it) }
         intent.getStringExtra("transaction")?.toLongOrNull()?.let { deepLink.value = DeepLink.Transaction(it) }
+        intent.getStringExtra("subscriptions")?.let { deepLink.value = DeepLink.Subscriptions }
     }
 }
 
 sealed interface DeepLink {
     data class Account(val id: String) : DeepLink
     data class Transaction(val id: Long) : DeepLink
+    data object Subscriptions : DeepLink
 }

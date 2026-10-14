@@ -58,6 +58,9 @@ interface TransactionDao {
     )
     suspend fun unmatched(accountId: String, from: Long, to: Long): List<TransactionEntity>
 
+    @Query("SELECT * FROM transactions WHERE deleted = 0 AND kind = 'EXPENSE' AND time >= :from")
+    suspend fun expensesSince(from: Long): List<TransactionEntity>
+
     @Query("SELECT * FROM transactions WHERE deleted = 0 AND time BETWEEN :from AND :to AND kind != 'TRANSFER'")
     suspend fun around(from: Long, to: Long): List<TransactionEntity>
 
@@ -158,9 +161,30 @@ interface RawDao {
     suspend fun clear()
 }
 
+@Dao
+interface SubscriptionDao {
+    @Query("SELECT * FROM subscriptions WHERE dismissed = 0 ORDER BY nextCharge")
+    fun observeActive(): Flow<List<SubscriptionEntity>>
+
+    @Query("SELECT * FROM subscriptions")
+    suspend fun all(): List<SubscriptionEntity>
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insert(s: SubscriptionEntity): Long
+
+    @Update
+    suspend fun update(s: SubscriptionEntity)
+
+    @Query("DELETE FROM subscriptions WHERE id = :id")
+    suspend fun delete(id: Long)
+}
+
 @Database(
-    entities = [AccountEntity::class, TransactionEntity::class, CategoryEntity::class, RuleEntity::class, RawNotificationEntity::class],
-    version = 2,
+    entities = [
+        AccountEntity::class, TransactionEntity::class, CategoryEntity::class, RuleEntity::class,
+        RawNotificationEntity::class, SubscriptionEntity::class,
+    ],
+    version = 3,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -169,11 +193,12 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun categories(): CategoryDao
     abstract fun rules(): RuleDao
     abstract fun raw(): RawDao
+    abstract fun subscriptions(): SubscriptionDao
 
     companion object {
         fun create(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "monosync.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .fallbackToDestructiveMigration()
                 .build()
     }
@@ -182,5 +207,18 @@ abstract class AppDatabase : RoomDatabase() {
 val MIGRATION_1_2 = object : Migration(1, 2) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE accounts ADD COLUMN goal INTEGER")
+    }
+}
+
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `subscriptions` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`key` TEXT NOT NULL, `name` TEXT NOT NULL, `amount` INTEGER NOT NULL, `currency` INTEGER NOT NULL, " +
+                "`accountId` TEXT, `period` TEXT NOT NULL, `lastCharge` INTEGER NOT NULL, `nextCharge` INTEGER NOT NULL, " +
+                "`remind` INTEGER NOT NULL, `dismissed` INTEGER NOT NULL, `manual` INTEGER NOT NULL, " +
+                "`userEdited` INTEGER NOT NULL, `notifiedFor` INTEGER NOT NULL)"
+        )
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_subscriptions_key` ON `subscriptions` (`key`)")
     }
 }

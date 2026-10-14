@@ -73,6 +73,8 @@ data class AppSettings(
     val primaryAccountId: String? = null,
     val notifyOnRecord: Boolean = false,
     val historyDays: Int = 7,
+    val subRemindersOn: Boolean = true,
+    val subRemindDays: Int = 3,
 )
 
 class Settings(private val context: Context) {
@@ -95,6 +97,8 @@ class Settings(private val context: Context) {
         val notifyOnRecord = booleanPreferencesKey("notify_on_record")
         val rates = stringPreferencesKey("rates")
         val historyDays = longPreferencesKey("history_days")
+        val subRemindersOn = booleanPreferencesKey("sub_reminders_on")
+        val subRemindDays = longPreferencesKey("sub_remind_days")
     }
 
     val flow: Flow<AppSettings> = context.dataStore.data.map { p -> read(p) }
@@ -118,6 +122,8 @@ class Settings(private val context: Context) {
         primaryAccountId = p[K.primaryAccount],
         notifyOnRecord = p[K.notifyOnRecord] ?: false,
         historyDays = (p[K.historyDays] ?: 7L).toInt(),
+        subRemindersOn = p[K.subRemindersOn] ?: true,
+        subRemindDays = (p[K.subRemindDays] ?: 3L).toInt(),
     )
 
     suspend fun setNotionEnabled(v: Boolean) = context.dataStore.edit {
@@ -161,6 +167,9 @@ class Settings(private val context: Context) {
     }
     suspend fun setNotifyOnRecord(v: Boolean) = context.dataStore.edit { it[K.notifyOnRecord] = v }
     suspend fun setHistoryDays(v: Int) = context.dataStore.edit { it[K.historyDays] = v.toLong() }
+
+    suspend fun setSubReminders(on: Boolean) = context.dataStore.edit { it[K.subRemindersOn] = on }
+    suspend fun setSubRemindDays(days: Int) = context.dataStore.edit { it[K.subRemindDays] = days.toLong() }
 
     suspend fun rates(): Rates? = context.dataStore.data.first()[K.rates]
         ?.let { runCatching { json.decodeFromString<Rates>(it) }.getOrNull() }

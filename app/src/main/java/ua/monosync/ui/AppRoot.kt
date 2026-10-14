@@ -56,6 +56,7 @@ import ua.monosync.ui.screens.LogScreen
 import ua.monosync.ui.screens.MonoScreen
 import ua.monosync.ui.screens.NotionScreen
 import ua.monosync.ui.screens.SettingsScreen
+import ua.monosync.ui.screens.SubscriptionsScreen
 import ua.monosync.ui.screens.TransactionSheet
 import ua.monosync.ui.screens.TransactionsScreen
 
@@ -87,6 +88,7 @@ fun AppRoot(vm: MainViewModel, deepLink: DeepLink?, onDeepLinkHandled: () -> Uni
     val notionRunning by vm.notionRunning.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
     val message by vm.message.collectAsStateWithLifecycle()
+    val subscriptions by vm.subscriptions.collectAsStateWithLifecycle()
 
     var openTx by remember { mutableStateOf<TransactionEntity?>(null) }
     var newTx by remember { mutableStateOf<TransactionEntity?>(null) }
@@ -104,6 +106,7 @@ fun AppRoot(vm: MainViewModel, deepLink: DeepLink?, onDeepLinkHandled: () -> Uni
         when (deepLink) {
             is DeepLink.Account -> accounts.firstOrNull { it.id == deepLink.id }?.let { openAccount = it; onDeepLinkHandled() }
             is DeepLink.Transaction -> recent.firstOrNull { it.id == deepLink.id }?.let { openTx = it; onDeepLinkHandled() }
+            DeepLink.Subscriptions -> { nav.navigate("subscriptions") { launchSingleTop = true }; onDeepLinkHandled() }
             null -> Unit
         }
     }
@@ -183,6 +186,8 @@ fun AppRoot(vm: MainViewModel, deepLink: DeepLink?, onDeepLinkHandled: () -> Uni
                     onOpenNotion = { go("notion") },
                     onOpenMono = { go("mono") },
                     onSeeAll = { go("transactions") },
+                    subscriptions = subscriptions,
+                    onOpenSubscriptions = { go("subscriptions") },
                 )
             }
             composable("transactions") {
@@ -211,6 +216,8 @@ fun AppRoot(vm: MainViewModel, deepLink: DeepLink?, onDeepLinkHandled: () -> Uni
                     onAccounts = { go("accounts") },
                     onCategories = { go("categories") },
                     onLog = { go("log") },
+                    onSubscriptions = { go("subscriptions") },
+                    subscriptionsCount = subscriptions.size,
                     onDynamicColor = { vm.setDynamicColor(it) },
                     onNotifyOnRecord = { vm.setNotifyOnRecord(it) },
                 )
@@ -270,6 +277,19 @@ fun AppRoot(vm: MainViewModel, deepLink: DeepLink?, onDeepLinkHandled: () -> Uni
                     onDelete = { vm.deleteCategory(it) },
                 )
             }
+            composable("subscriptions") {
+                SubscriptionsScreen(
+                    settings = settings,
+                    subscriptions = subscriptions,
+                    busy = busy,
+                    onBack = { nav.popBackStack() },
+                    onRemindersOn = { vm.setSubReminders(it) },
+                    onRemindDays = { vm.setSubRemindDays(it) },
+                    onRefresh = { vm.refreshSubscriptions() },
+                    onUpdate = { vm.updateSubscription(it) },
+                    onDismiss = { vm.dismissSubscription(it) },
+                )
+            }
             composable("log") {
                 val log by vm.rawLog.collectAsStateWithLifecycle()
                 LogScreen(log, onBack = { nav.popBackStack() }, onClear = { vm.clearLog() })
@@ -289,6 +309,7 @@ fun AppRoot(vm: MainViewModel, deepLink: DeepLink?, onDeepLinkHandled: () -> Uni
             },
             onDelete = { vm.deleteTransaction(it) },
             onResend = { vm.resend(it) },
+            onMarkSubscription = { vm.markAsSubscription(it) },
             budgetCurrency = categoryCurrency,
             notionCategories = settings.notionConfig != null && settings.notionEnabled,
             onCreateCategory = { name, budget, group, done -> vm.createCategory(name, budget, group, done) },

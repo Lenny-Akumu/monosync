@@ -33,6 +33,11 @@ object SyncScheduler {
             ExistingPeriodicWorkPolicy.KEEP,
             PeriodicWorkRequestBuilder<MonoWorker>(30, TimeUnit.MINUTES).setConstraints(network).build(),
         )
+        wm.enqueueUniquePeriodicWork(
+            "subscriptions_periodic",
+            ExistingPeriodicWorkPolicy.KEEP,
+            PeriodicWorkRequestBuilder<SubscriptionWorker>(6, TimeUnit.HOURS).build(),
+        )
     }
 
     fun monoNow(context: Context, delaySeconds: Long = 0, full: Boolean = false, accountId: String? = null) {
@@ -84,6 +89,7 @@ class MonoWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                 }
             }
             repo.settings.setMonoStatus(null)
+            afterNewCharges(applicationContext)
             BalanceWidget.refresh(applicationContext)
             SyncScheduler.notionNow(applicationContext)
             Result.success()
@@ -107,5 +113,24 @@ class NotionWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             app.repo.settings.setNotionStatus(e.message ?: e.javaClass.simpleName)
             if (runAttemptCount < 4) Result.retry() else Result.failure()
         }
+    }
+}
+
+class SubscriptionWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+    override suspend fun doWork(): Result {
+        val repo = applicationContext.app.repo
+        return runCatching {
+            repo.refreshSubscriptions()
+            repo.dueReminders().forEach { (sub, days) -> Notifier.subscriptionDue(applicationContext, sub, days) }
+            Result.success()
+        }.getOrElse { Result.retry() }
+    }
+}
+
+suspend fun afterNewCharges(context: Context) {
+    val repo = context.app.repo
+    runCatching {
+        repo.refreshSubscriptions()
+        repo.dueReminders().forEach { (sub, days) -> Notifier.subscriptionDue(context, sub, days) }
     }
 }

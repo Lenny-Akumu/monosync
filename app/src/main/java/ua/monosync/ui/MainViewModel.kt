@@ -51,6 +51,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val pendingCount: StateFlow<Int> = repo.db.transactions().observePendingCount().stateIn(viewModelScope, SharingStarted.Eagerly, 0)
     val rawLog = repo.db.raw().observe().stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
     val rules = repo.db.rules().observeAll().stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+    val subscriptions = repo.db.subscriptions().observeActive().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val monoToken = repo.secrets.monoToken
     val notionToken = repo.secrets.notionToken
 
@@ -285,6 +286,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         repo.deleteCategory(c)
         _message.value = "Категорію «${c.name}» видалено"
     }
+
+    fun updateSubscription(s: ua.monosync.data.db.SubscriptionEntity) = viewModelScope.launch {
+        repo.db.subscriptions().update(s.copy(userEdited = true, notifiedFor = if (s.remind) s.notifiedFor else 0))
+    }
+
+    fun dismissSubscription(s: ua.monosync.data.db.SubscriptionEntity) = viewModelScope.launch {
+        repo.db.subscriptions().update(s.copy(dismissed = true))
+        _message.value = "«${s.name}» більше не вважається підпискою"
+    }
+
+    fun markAsSubscription(tx: TransactionEntity) = viewModelScope.launch {
+        repo.markAsSubscription(tx)
+        _message.value = "Додано в підписки"
+    }
+
+    fun refreshSubscriptions() = work("Шукаю підписки…") {
+        repo.refreshSubscriptions()
+        _message.value = "Підписки оновлено"
+    }
+
+    fun setSubReminders(on: Boolean) = viewModelScope.launch { repo.settings.setSubReminders(on) }
+    fun setSubRemindDays(days: Int) = viewModelScope.launch { repo.settings.setSubRemindDays(days) }
 
     fun deleteRule(pattern: String) = viewModelScope.launch { repo.db.rules().delete(pattern) }
     fun clearLog() = viewModelScope.launch { repo.db.raw().clear() }

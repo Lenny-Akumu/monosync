@@ -28,6 +28,7 @@ class MonoSyncApp : Application() {
         Notifier.createChannels(this)
         scope.launch {
             repo.ensureLocalCategories()
+            runCatching { repo.refreshSubscriptions() }
             SyncScheduler.schedulePeriodic(this@MonoSyncApp)
         }
     }

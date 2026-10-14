@@ -7,7 +7,10 @@ import kotlinx.coroutines.sync.withLock
 import ua.monosync.core.CardKeys
 import ua.monosync.core.Currency
 import ua.monosync.core.Direction
+import ua.monosync.core.Charge
 import ua.monosync.core.Mcc
+import ua.monosync.core.Period
+import ua.monosync.core.SubscriptionDetector
 import ua.monosync.core.NotificationParser
 import ua.monosync.core.ParsedNotification
 import ua.monosync.data.db.AccountEntity
@@ -17,6 +20,7 @@ import ua.monosync.data.db.Kind
 import ua.monosync.data.db.RawNotificationEntity
 import ua.monosync.data.db.RuleEntity
 import ua.monosync.data.db.Source
+import ua.monosync.data.db.SubscriptionEntity
 import ua.monosync.data.db.SyncState
 import ua.monosync.data.db.TransactionEntity
 import ua.monosync.data.db.JAR_TYPE
@@ -27,6 +31,10 @@ import ua.monosync.data.remote.MonoApi
 import ua.monosync.data.remote.MonoJar
 import ua.monosync.data.remote.MonoStatementItem
 import java.security.MessageDigest
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 import kotlin.math.abs
 
 class Repository(
@@ -509,6 +517,98 @@ class Repository(
         val id = db.transactions().insert(tx)
         if (id > 0) mergeOwnTransfer(tx.copy(id = id))
         return id > 0
+    }
+
+    // Subscriptions
+
+    private val day = 24 * 3600_000L
+
+    /** Looks for regular charges in the last year and keeps the subscriptions table in step. */
+    suspend fun refreshSubscriptions() {
+        val now = System.currentTimeMillis()
+        val zone = ZoneId.systemDefault()
+        val cats = db.categories().all().associateBy { it.id }
+        val charges = db.transactions().expensesSince(now - 420 * day)
+            .filter { !it.genericDescription }
+            .map { tx ->
+                val cat = tx.categoryId?.let { cats[it] }
+                Charge(
+                    name = tx.description,
+                    time = tx.time,
+                    amountMinor = -tx.amount,
+                    currencyIso = tx.currency,
+                    accountId = tx.accountId,
+                    subscriptionHint = cat?.groupKey == "digital" ||
+                        cat?.name?.lowercase()?.contains("підпис") == true ||
+                        Mcc.group(tx.mcc)?.key == "digital",
+                )
+            }
+        val existing = db.subscriptions().all().associateBy { it.key }
+        for (d in SubscriptionDetector.detect(charges, now, zone)) {
+            val e = existing[d.key]
+            if (e == null) {
+                db.subscriptions().insert(
+                    SubscriptionEntity(
+                        key = d.key, name = d.name, amount = d.amountMinor, currency = d.currencyIso,
+                        accountId = d.accountId, period = d.period.name, lastCharge = d.lastCharge, nextCharge = d.nextCharge,
+                    )
+                )
+            } else if (d.lastCharge > e.lastCharge || (!e.userEdited && e.nextCharge != d.nextCharge)) {
+                val period = if (e.userEdited) Period.byName(e.period) else d.period
+                db.subscriptions().update(
+                    e.copy(
+                        name = if (e.userEdited) e.name else d.name,
+                        amount = if (e.userEdited) e.amount else d.amountMinor,
+                        period = period.name,
+                        lastCharge = maxOf(e.lastCharge, d.lastCharge),
+                        nextCharge = rollForward(period.next(maxOf(e.lastCharge, d.lastCharge), zone), period, now),
+                    )
+                )
+            }
+        }
+        db.subscriptions().all().filter { !it.dismissed && it.nextCharge < now - 5 * day }.forEach {
+            db.subscriptions().update(it.copy(nextCharge = rollForward(it.nextCharge, Period.byName(it.period), now)))
+        }
+    }
+
+    private fun rollForward(from: Long, period: Period, now: Long): Long {
+        var next = from
+        while (next < now - 5 * day) next = period.next(next, ZoneId.systemDefault())
+        return next
+    }
+
+    suspend fun markAsSubscription(tx: TransactionEntity) {
+        val key = SubscriptionDetector.key(tx.description)
+        val existing = db.subscriptions().all().firstOrNull { it.key == key }
+        val next = rollForward(Period.MONTHLY.next(tx.time, ZoneId.systemDefault()), Period.MONTHLY, System.currentTimeMillis())
+        if (existing != null) {
+            db.subscriptions().update(existing.copy(dismissed = false, lastCharge = maxOf(existing.lastCharge, tx.time)))
+        } else {
+            db.subscriptions().insert(
+                SubscriptionEntity(
+                    key = key, name = tx.description, amount = abs(tx.amount), currency = tx.currency, accountId = tx.accountId,
+                    period = Period.MONTHLY.name, lastCharge = tx.time, nextCharge = next, manual = true, userEdited = true,
+                )
+            )
+        }
+    }
+
+    /** Subscriptions whose reminder is due now; marks them as reminded. */
+    suspend fun dueReminders(): List<Pair<SubscriptionEntity, Int>> {
+        val s = settings.current()
+        if (!s.subRemindersOn) return emptyList()
+        val now = System.currentTimeMillis()
+        val zone = ZoneId.systemDefault()
+        val today = LocalDate.now(zone)
+        return db.subscriptions().all()
+            .filter { !it.dismissed && it.remind && it.notifiedFor != it.nextCharge }
+            .mapNotNull { sub ->
+                val dueDay = Instant.ofEpochMilli(sub.nextCharge).atZone(zone).toLocalDate()
+                val daysLeft = ChronoUnit.DAYS.between(today, dueDay).toInt()
+                if (daysLeft < 0 || daysLeft > s.subRemindDays || sub.nextCharge < now - day) return@mapNotNull null
+                db.subscriptions().update(sub.copy(notifiedFor = sub.nextCharge))
+                sub to daysLeft
+            }
     }
 
     private fun sha(s: String): String =

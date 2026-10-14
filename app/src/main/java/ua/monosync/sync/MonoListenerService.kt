@@ -39,6 +39,7 @@ class MonoListenerService : NotificationListenerService() {
                     Notifier.recorded(applicationContext, result.tx, if (result.tx.kind == Kind.EXPENSE) cat else null)
                 }
                 BalanceWidget.refresh(applicationContext)
+                if (result.tx.kind == Kind.EXPENSE) afterNewCharges(applicationContext)
                 if (result.tx.syncState == SyncState.PENDING) SyncScheduler.notionNow(applicationContext, 5)
                 if (app.repo.secrets.monoToken.value != null) {
                     SyncScheduler.monoNow(

@@ -87,6 +87,24 @@ data class CategoryEntity(
     val sortOrder: Int = 0,
 )
 
+@Entity(tableName = "subscriptions", indices = [Index(value = ["key"], unique = true)])
+data class SubscriptionEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val key: String,
+    val name: String,
+    val amount: Long,
+    val currency: Int,
+    val accountId: String?,
+    val period: String,
+    val lastCharge: Long,
+    val nextCharge: Long,
+    val remind: Boolean = true,
+    val dismissed: Boolean = false,
+    val manual: Boolean = false,
+    val userEdited: Boolean = false,
+    val notifiedFor: Long = 0,
+)
+
 @Entity(tableName = "rules")
 data class RuleEntity(
     @PrimaryKey val pattern: String,
