@@ -43,6 +43,7 @@ import ua.monosync.BuildConfig
 import ua.monosync.data.AppSettings
 import ua.monosync.ui.components.Group
 import ua.monosync.ui.components.GroupDivider
+import ua.monosync.ui.components.NotionLogo
 import ua.monosync.ui.components.SectionLabel
 import ua.monosync.ui.components.SettingRow
 
@@ -99,7 +100,7 @@ fun SettingsScreen(
             )
             GroupDivider()
             SettingRow(
-                Icons.Rounded.TaskAlt,
+                NotionLogo,
                 "Notion",
                 when {
                     settings.notionConfig == null -> "Не підключено"

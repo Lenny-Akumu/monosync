@@ -72,6 +72,7 @@ import ua.monosync.data.db.TransactionEntity
 import ua.monosync.data.db.available
 import ua.monosync.data.db.cur
 import ua.monosync.ui.components.SectionLabel
+import ua.monosync.ui.components.NotionLogo
 import ua.monosync.ui.components.TxRow
 import ua.monosync.ui.components.dayOf
 import ua.monosync.ui.components.dayTitle
@@ -280,11 +281,11 @@ private fun SummaryTile(modifier: Modifier, label: String, value: String, icon: 
 @Composable
 private fun NotionChip(settings: AppSettings, pending: Int, onClick: () -> Unit) {
     val (icon, text) = when {
-        settings.notionConfig == null -> Icons.Rounded.CloudUpload to "Підключи Notion, щоб вести облік там"
-        !settings.notionEnabled -> Icons.Rounded.CloudUpload to "Синхронізацію з Notion призупинено"
+        settings.notionConfig == null -> NotionLogo to "Підключи Notion, щоб вести облік там"
+        !settings.notionEnabled -> NotionLogo to "Синхронізацію з Notion призупинено"
         settings.notionLastError != null -> Icons.Rounded.ErrorOutline to "Notion: ${settings.notionLastError}"
-        pending > 0 -> Icons.Rounded.CloudUpload to "Notion: у черзі $pending"
-        else -> Icons.Rounded.CloudDone to "Notion синхронізовано"
+        pending > 0 -> NotionLogo to "Notion: у черзі $pending"
+        else -> NotionLogo to "Notion синхронізовано"
     }
     AssistChip(
         onClick = onClick,

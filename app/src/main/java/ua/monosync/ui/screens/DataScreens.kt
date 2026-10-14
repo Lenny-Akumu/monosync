@@ -10,17 +10,21 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.CreditCard
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.HelpOutline
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -28,12 +32,16 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import ua.monosync.core.Currency
 import ua.monosync.core.Money
 import ua.monosync.core.NotificationParser
 import ua.monosync.data.AppSettings
@@ -102,15 +110,46 @@ fun CategoriesScreen(
     categories: List<CategoryEntity>,
     rules: List<RuleEntity>,
     notionConnected: Boolean,
+    currency: Currency,
     onBack: () -> Unit,
     onDeleteRule: (String) -> Unit,
+    onCreate: (name: String, budget: Long?, groupKey: String?) -> Unit,
+    onUpdate: (CategoryEntity) -> Unit,
+    onDelete: (CategoryEntity) -> Unit,
 ) {
     val catById = remember(categories) { categories.associateBy { it.id } }
+    var editing by remember { mutableStateOf<CategoryEntity?>(null) }
+    var creating by remember { mutableStateOf(false) }
     SubScreen("Категорії та правила", onBack) {
         Hint(
-            if (notionConnected) "Категорії беруться з твоєї бази в Notion разом з бюджетами. Новим операціям категорія ставиться за MCC-кодом, назвою магазину або твоїми правилами."
-            else "Поки Notion не підключено, працюють вбудовані категорії. Після підключення їх замінять категорії з Notion."
+            if (notionConnected) "Категорії беруться з твоєї бази в Notion разом з бюджетами. Нові категорії, створені тут, теж з'являться в Notion."
+            else "Створюй свої категорії прямо тут. Коли підключиш Notion, вони переїдуть у твою базу категорій."
         )
+        Spacer(Modifier.height(8.dp))
+        FilledTonalButton(onClick = { creating = true }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+            Icon(Icons.Rounded.Add, null)
+            Spacer(Modifier.width(8.dp))
+            Text("Нова категорія")
+        }
+        SectionLabel("Категорії")
+        Group {
+            categories.forEachIndexed { i, c ->
+                if (i > 0) GroupDivider()
+                SettingRow(
+                    iconForGroup(c.groupKey), c.name,
+                    listOfNotNull(
+                        when {
+                            c.fromNotion -> "Notion"
+                            c.id.startsWith("user:") -> "твоя"
+                            else -> "вбудована"
+                        },
+                        c.budget?.let { "бюджет ${Money.formatShort(it, currency)}" },
+                    ).joinToString(" · "),
+                    trailing = { Icon(Icons.Rounded.Edit, "Змінити", tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                    onClick = { editing = c },
+                )
+            }
+        }
         if (rules.isNotEmpty()) {
             SectionLabel("Правила, яких навчився застосунок")
             Group {
@@ -123,19 +162,26 @@ fun CategoriesScreen(
                 }
             }
         }
-        SectionLabel("Категорії")
-        Group {
-            categories.forEachIndexed { i, c ->
-                if (i > 0) GroupDivider()
-                SettingRow(
-                    iconForGroup(c.groupKey), c.name,
-                    listOfNotNull(
-                        if (c.fromNotion) "Notion" else "вбудована",
-                        c.budget?.let { "бюджет ${Money.formatShort(it, null)}" },
-                    ).joinToString(" · "),
-                )
-            }
-        }
+    }
+    if (creating) {
+        CategoryDialog(
+            initial = null,
+            currency = currency,
+            toNotion = notionConnected,
+            onSave = onCreate,
+            onDelete = null,
+            onDismiss = { creating = false },
+        )
+    }
+    editing?.let { c ->
+        CategoryDialog(
+            initial = c,
+            currency = currency,
+            toNotion = notionConnected,
+            onSave = { name, budget, group -> onUpdate(c.copy(name = name, budget = budget, groupKey = group)) },
+            onDelete = if (c.fromNotion) null else ({ onDelete(c) }),
+            onDismiss = { editing = null },
+        )
     }
 }
 

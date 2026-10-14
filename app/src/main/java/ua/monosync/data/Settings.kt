@@ -45,6 +45,7 @@ data class NotionConfig(
     val categoriesDsId: String? = null,
     val categoriesName: String? = null,
     val categoriesBudgetProp: String? = null,
+    val categoriesTitleProp: String? = null,
 )
 
 @Serializable

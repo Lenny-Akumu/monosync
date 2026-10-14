@@ -65,6 +65,7 @@ import ua.monosync.ui.Busy
 import ua.monosync.ui.NotionDiscovery
 import ua.monosync.ui.components.Group
 import ua.monosync.ui.components.GroupDivider
+import ua.monosync.ui.components.NotionLogo
 import ua.monosync.ui.components.SectionLabel
 import ua.monosync.ui.components.SelectDialog
 import ua.monosync.ui.components.SettingRow
@@ -325,7 +326,7 @@ fun NotionScreen(
             else -> {
                 Group {
                     SettingRow(
-                        Icons.Rounded.CloudUpload, "Синхронізація",
+                        NotionLogo, "Синхронізація",
                         when {
                             settings.notionLastError != null -> "Помилка: ${settings.notionLastError}"
                             pendingCount > 0 -> "У черзі: $pendingCount"

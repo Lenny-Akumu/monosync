@@ -148,6 +148,8 @@ class NotionApi(private val tokenProvider: () -> String?) {
 
         fun number(v: Double) = buildJsonObject { put("number", v) }
 
+        fun emptyNumber() = buildJsonObject { put("number", JsonNull) }
+
         fun date(start: String) = buildJsonObject { putJsonObject("date") { put("start", start) } }
 
         fun relation(id: String?) = buildJsonObject {

@@ -96,6 +96,7 @@ class NotionSync(private val repo: Repository) {
             accountsName = accounts?.title,
             categoriesDsId = categories?.id,
             categoriesName = categories?.title,
+            categoriesTitleProp = categories?.properties?.firstOrNull { it.type == "title" }?.name,
             categoriesBudgetProp = categories?.properties?.filter { it.type == "number" }
                 ?.let { nums -> nums.firstOrNull { n -> listOf("бюджет", "budget", "ліміт", "limit").any { n.name.lowercase().contains(it) } } ?: nums.firstOrNull() }
                 ?.name,
@@ -115,13 +116,14 @@ class NotionSync(private val repo: Repository) {
         config.categoriesDsId?.let { id ->
             val budgetProp = config.categoriesBudgetProp
             val rows = api.queryAll(id, listOfNotNull(budgetProp))
+            val known = db.categories().all().associateBy { it.id }
             val cats = rows.mapIndexed { i, r ->
                 val group = Mcc.groups.firstOrNull { g -> g.title.equals(r.title, true) || g.keywords.any { r.title.lowercase().contains(it) } }
                 CategoryEntity(
                     id = r.id,
                     name = r.title,
                     budget = budgetProp?.let { r.numbers[it] }?.let { Math.round(it * 100) },
-                    groupKey = group?.key,
+                    groupKey = known[r.id]?.groupKey ?: group?.key,
                     fromNotion = true,
                     sortOrder = i,
                 )
@@ -131,9 +133,49 @@ class NotionSync(private val repo: Repository) {
                 old.forEach { db.categories().delete(it) }
                 db.categories().upsert(cats)
                 remapLocalCategories(cats)
-                db.categories().deleteBySource(false)
+                db.categories().deleteBuiltIn()
             }
+            pushOwnCategories(cats)
         }
+    }
+
+    /** Categories made in the app before Notion was connected move into the Notion database. */
+    private suspend fun pushOwnCategories(notionCats: List<CategoryEntity>) {
+        db.categories().all().filter { it.id.startsWith("user:") }.forEach { own ->
+            val same = notionCats.firstOrNull { it.name.equals(own.name, true) }
+            val targetId = same?.id ?: runCatching { createCategory(own.name, own.budget) }.getOrNull() ?: return@forEach
+            if (same == null) db.categories().upsert(listOf(own.copy(id = targetId, fromNotion = true)))
+            db.transactions().remapCategory(own.id, targetId)
+            db.rules().remap(own.id, targetId)
+            db.categories().delete(own.id)
+        }
+    }
+
+    suspend fun canWriteCategories(): Boolean {
+        val s = settings.current()
+        return s.notionEnabled && s.notionConfig?.categoriesDsId != null && repo.secrets.notionToken.value != null
+    }
+
+    private suspend fun categoryProps(name: String, budget: Long?): Pair<String, kotlinx.serialization.json.JsonObject> {
+        val config = settings.current().notionConfig ?: throw ApiException(400, "Notion не підключено")
+        val dsId = config.categoriesDsId ?: throw ApiException(400, "Не вибрано базу категорій")
+        val titleProp = config.categoriesTitleProp
+            ?: api.dataSource(dsId)?.properties?.firstOrNull { it.type == "title" }?.name
+            ?: throw ApiException(400, "У базі категорій немає колонки-назви")
+        val props = buildJsonObject {
+            put(titleProp, NotionApi.title(name))
+            config.categoriesBudgetProp?.let { put(it, if (budget != null) NotionApi.number(budget / 100.0) else NotionApi.emptyNumber()) }
+        }
+        return dsId to props
+    }
+
+    suspend fun createCategory(name: String, budget: Long?): String {
+        val (dsId, props) = categoryProps(name, budget)
+        return api.createPage(dsId, props)
+    }
+
+    suspend fun updateCategory(id: String, name: String, budget: Long?) {
+        api.updatePage(id, categoryProps(name, budget).second)
     }
 
     private suspend fun remapLocalCategories(cats: List<CategoryEntity>) {
@@ -226,7 +268,7 @@ class NotionSync(private val repo: Repository) {
                 target.accountProp?.let { put(it, NotionApi.relation(account.notionAccountId)) }
             }
             if (tx.kind == Kind.EXPENSE) {
-                target.categoryProp?.let { put(it, NotionApi.relation(tx.categoryId?.takeIf { id -> !id.startsWith("local:") })) }
+                target.categoryProp?.let { put(it, NotionApi.relation(tx.categoryId?.takeIf { id -> !id.startsWith("local:") && !id.startsWith("user:") })) }
             }
         }
 

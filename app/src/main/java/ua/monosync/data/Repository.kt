@@ -172,6 +172,18 @@ class Repository(
             ?: group?.let { g -> cats.firstOrNull { it.groupKey == g.key }?.id }
     }
 
+    suspend fun addLocalCategory(name: String, budget: Long?, groupKey: String?): String {
+        val id = "user:" + java.util.UUID.randomUUID().toString()
+        db.categories().upsert(listOf(CategoryEntity(id, name.trim(), budget, groupKey, fromNotion = false, sortOrder = -1)))
+        return id
+    }
+
+    suspend fun deleteCategory(c: CategoryEntity) {
+        db.transactions().remapCategory(c.id, null)
+        db.rules().deleteByCategory(c.id)
+        db.categories().delete(c.id)
+    }
+
     suspend fun setCategory(tx: TransactionEntity, categoryId: String?, remember: Boolean) {
         db.transactions().update(tx.copy(categoryId = categoryId, userEdited = true, syncState = resync(tx)))
         if (remember && categoryId != null) {

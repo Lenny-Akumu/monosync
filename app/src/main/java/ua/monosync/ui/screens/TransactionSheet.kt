@@ -17,6 +17,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CreditCard
@@ -89,7 +90,11 @@ fun TransactionSheet(
     onDelete: (TransactionEntity) -> Unit,
     onResend: (TransactionEntity) -> Unit,
     onDismiss: () -> Unit,
+    budgetCurrency: Currency = Currency.UAH,
+    notionCategories: Boolean = false,
+    onCreateCategory: (String, Long?, String?, (String) -> Unit) -> Unit = { _, _, _, _ -> },
 ) {
+    var newCategory by remember { mutableStateOf(false) }
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val usable = accounts.filter { !it.hidden }
     var description by remember { mutableStateOf(initial.description) }
@@ -181,7 +186,7 @@ fun TransactionSheet(
                 }
             }
 
-            if (kind == Kind.EXPENSE && categories.isNotEmpty()) {
+            if (kind == Kind.EXPENSE) {
                 FlowRow(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -197,6 +202,12 @@ fun TransactionSheet(
                             },
                         )
                     }
+                    FilterChip(
+                        selected = false,
+                        onClick = { newCategory = true },
+                        label = { Text("Нова") },
+                        leadingIcon = { Icon(Icons.Rounded.Add, null, Modifier.size(FilterChipDefaults.IconSize)) },
+                    )
                 }
             }
 
@@ -287,6 +298,16 @@ fun TransactionSheet(
         }
     }
 
+    if (newCategory) {
+        CategoryDialog(
+            initial = null,
+            currency = budgetCurrency,
+            toNotion = notionCategories,
+            onSave = { name, budget, group -> onCreateCategory(name, budget, group) { id -> categoryId = id } },
+            onDelete = null,
+            onDismiss = { newCategory = false },
+        )
+    }
     if (pickAccount) {
         SelectDialog("Картка", usable, account, { "${it.name} · ${it.cur.code}" }, { accountId = it.id }, { pickAccount = false })
     }

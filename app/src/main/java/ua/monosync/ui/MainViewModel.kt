@@ -263,6 +263,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setDynamicColor(v: Boolean) = viewModelScope.launch { repo.settings.setDynamicColor(v) }
     fun setNotifyOnRecord(v: Boolean) = viewModelScope.launch { repo.settings.setNotifyOnRecord(v) }
+    fun createCategory(name: String, budget: Long?, groupKey: String?, onCreated: (String) -> Unit = {}) = work("Створюю категорію…") {
+        val clean = name.trim()
+        val id = if (notion.canWriteCategories()) {
+            val pageId = notion.createCategory(clean, budget)
+            repo.db.categories().upsert(listOf(CategoryEntity(pageId, clean, budget, groupKey, fromNotion = true, sortOrder = -1)))
+            pageId
+        } else {
+            repo.addLocalCategory(clean, budget, groupKey)
+        }
+        onCreated(id)
+        _message.value = "Категорію «$clean» створено"
+    }
+
+    fun updateCategory(c: CategoryEntity) = work("Зберігаю категорію…") {
+        if (c.fromNotion && notion.canWriteCategories()) notion.updateCategory(c.id, c.name, c.budget)
+        repo.db.categories().upsert(listOf(c))
+    }
+
+    fun deleteCategory(c: CategoryEntity) = viewModelScope.launch {
+        repo.deleteCategory(c)
+        _message.value = "Категорію «${c.name}» видалено"
+    }
+
     fun deleteRule(pattern: String) = viewModelScope.launch { repo.db.rules().delete(pattern) }
     fun clearLog() = viewModelScope.launch { repo.db.raw().clear() }
 

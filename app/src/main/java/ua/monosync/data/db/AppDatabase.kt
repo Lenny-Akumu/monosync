@@ -86,6 +86,12 @@ interface TransactionDao {
     @Query("UPDATE transactions SET syncState = 'PENDING' WHERE accountId = :accountId AND syncState = 'SKIPPED' AND deleted = 0 AND time >= :since")
     suspend fun releaseForAccount(accountId: String, since: Long)
 
+    @Query(
+        "UPDATE transactions SET categoryId = :to, " +
+            "syncState = CASE WHEN notionPageId IS NOT NULL THEN 'PENDING' ELSE syncState END WHERE categoryId = :from"
+    )
+    suspend fun remapCategory(from: String, to: String?)
+
     @Query("UPDATE transactions SET syncState = 'PENDING', syncError = NULL WHERE syncState = 'ERROR'")
     suspend fun retryErrors()
 }
@@ -101,8 +107,8 @@ interface CategoryDao {
     @Upsert
     suspend fun upsert(items: List<CategoryEntity>)
 
-    @Query("DELETE FROM categories WHERE fromNotion = :fromNotion")
-    suspend fun deleteBySource(fromNotion: Boolean)
+    @Query("DELETE FROM categories WHERE id LIKE 'local:%'")
+    suspend fun deleteBuiltIn()
 
     @Query("DELETE FROM categories WHERE id = :id")
     suspend fun delete(id: String)
@@ -121,6 +127,12 @@ interface RuleDao {
 
     @Query("DELETE FROM rules WHERE pattern = :pattern")
     suspend fun delete(pattern: String)
+
+    @Query("UPDATE rules SET categoryId = :to WHERE categoryId = :from")
+    suspend fun remap(from: String, to: String)
+
+    @Query("DELETE FROM rules WHERE categoryId = :id")
+    suspend fun deleteByCategory(id: String)
 }
 
 @Dao

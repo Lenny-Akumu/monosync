@@ -46,6 +46,7 @@ import ua.monosync.data.db.AccountEntity
 import ua.monosync.data.db.Kind
 import ua.monosync.data.db.Source
 import ua.monosync.data.db.TransactionEntity
+import ua.monosync.ui.components.FitText
 import ua.monosync.ui.screens.AccountDialog
 import ua.monosync.ui.screens.AccountsScreen
 import ua.monosync.ui.screens.AnalyticsScreen
@@ -115,6 +116,7 @@ fun AppRoot(vm: MainViewModel, deepLink: DeepLink?, onDeepLinkHandled: () -> Uni
     fun go(r: String) = nav.navigate(r) { launchSingleTop = true }
 
     val isTab = tabs.any { it.route == route }
+    val categoryCurrency = settings.notionConfig?.currency?.let { Currency.byCode(it) } ?: Currency.UAH
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
@@ -133,7 +135,7 @@ fun AppRoot(vm: MainViewModel, deepLink: DeepLink?, onDeepLinkHandled: () -> Uni
                                 }
                             },
                             icon = { Icon(if (selected) tab.selectedIcon else tab.icon, null) },
-                            label = { Text(tab.label) },
+                            label = { FitText(tab.label) },
                         )
                     }
                 }
@@ -256,7 +258,17 @@ fun AppRoot(vm: MainViewModel, deepLink: DeepLink?, onDeepLinkHandled: () -> Uni
             }
             composable("categories") {
                 val rules by vm.rules.collectAsStateWithLifecycle()
-                CategoriesScreen(categories, rules, settings.notionConfig != null, onBack = { nav.popBackStack() }, onDeleteRule = { vm.deleteRule(it) })
+                CategoriesScreen(
+                    categories = categories,
+                    rules = rules,
+                    notionConnected = settings.notionConfig != null && settings.notionEnabled,
+                    currency = categoryCurrency,
+                    onBack = { nav.popBackStack() },
+                    onDeleteRule = { vm.deleteRule(it) },
+                    onCreate = { name, budget, group -> vm.createCategory(name, budget, group) },
+                    onUpdate = { vm.updateCategory(it) },
+                    onDelete = { vm.deleteCategory(it) },
+                )
             }
             composable("log") {
                 val log by vm.rawLog.collectAsStateWithLifecycle()
@@ -277,6 +289,9 @@ fun AppRoot(vm: MainViewModel, deepLink: DeepLink?, onDeepLinkHandled: () -> Uni
             },
             onDelete = { vm.deleteTransaction(it) },
             onResend = { vm.resend(it) },
+            budgetCurrency = categoryCurrency,
+            notionCategories = settings.notionConfig != null && settings.notionEnabled,
+            onCreateCategory = { name, budget, group, done -> vm.createCategory(name, budget, group, done) },
             onDismiss = { openTx = null },
         )
     }
@@ -290,6 +305,9 @@ fun AppRoot(vm: MainViewModel, deepLink: DeepLink?, onDeepLinkHandled: () -> Uni
             onSave = { tx, _ -> vm.addManual(tx) },
             onDelete = {},
             onResend = {},
+            budgetCurrency = categoryCurrency,
+            notionCategories = settings.notionConfig != null && settings.notionEnabled,
+            onCreateCategory = { name, budget, group, done -> vm.createCategory(name, budget, group, done) },
             onDismiss = { newTx = null },
         )
     }
