@@ -122,8 +122,10 @@ class Repository(
         IngestResult.Recorded(merged, db.accounts().byId(account.id) ?: account, newAccount)
     }
 
+    private fun notionActive(s: AppSettings) = s.notionEnabled && s.notionStartAt > 0
+
     private fun initialSyncState(account: AccountEntity, time: Long, s: AppSettings): String =
-        if (!account.confirmed || time < s.notionStartAt) SyncState.SKIPPED else SyncState.PENDING
+        if (!notionActive(s) || !account.confirmed || time < s.notionStartAt) SyncState.SKIPPED else SyncState.PENDING
 
     /** Two opposite operations on two own cards within two minutes are one transfer. */
     private suspend fun mergeOwnTransfer(tx: TransactionEntity): TransactionEntity {
@@ -195,7 +197,7 @@ class Repository(
     suspend fun addManual(tx: TransactionEntity): Long {
         val s = settings.current()
         val acc = db.accounts().byId(tx.accountId)
-        val state = if (acc?.confirmed == true && tx.time >= s.notionStartAt) SyncState.PENDING else SyncState.SKIPPED
+        val state = if (acc?.confirmed == true && notionActive(s) && tx.time >= s.notionStartAt) SyncState.PENDING else SyncState.SKIPPED
         return db.transactions().insert(tx.copy(source = Source.MANUAL, syncState = state, userEdited = true))
     }
 
@@ -214,7 +216,8 @@ class Repository(
     suspend fun confirmAccount(account: AccountEntity, name: String, currency: Currency, notionAccountId: String?) {
         val updated = account.copy(name = name.trim().ifBlank { account.name }, currency = currency.iso, confirmed = true, notionAccountId = notionAccountId)
         db.accounts().upsert(updated)
-        db.transactions().releaseForAccount(account.id, settings.current().notionStartAt)
+        val s = settings.current()
+        if (notionActive(s)) db.transactions().releaseForAccount(account.id, s.notionStartAt)
     }
 
     suspend fun updateAccount(account: AccountEntity) = db.accounts().upsert(account)

@@ -43,7 +43,7 @@ object NotificationParser {
         "(поповнення|надходження|зарахування|повернення|відшкодування|зараховано|отримано|переказ від|від:|заробітна|зарплата)",
         RegexOption.IGNORE_CASE,
     )
-    private val junk = Regex("[\\p{So}\\p{Sk}\\p{Cs}\\p{Co}\\uFE0F\\u200D\\u20E3]")
+    private val junk = Regex("[\\p{So}\\p{Sk}\\p{Cs}\\p{Co}\\p{Cn}\\x{1F000}-\\x{1FFFF}\\x{2600}-\\x{27BF}\\uFE0F\\u200D\\u20E3]")
 
     fun parse(title: String?, text: String?): ParsedNotification? {
         val lines = listOfNotNull(title, text)

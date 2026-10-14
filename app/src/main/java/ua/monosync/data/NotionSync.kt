@@ -305,5 +305,7 @@ class NotionSync(private val repo: Repository) {
         settings.setNotionConfig(buildConfig(roles, currencyOverride))
         settings.setNotionEnabled(true)
         refreshLookups()
+        val startAt = settings.current().notionStartAt
+        db.accounts().all().filter { it.confirmed }.forEach { db.transactions().releaseForAccount(it.id, startAt) }
     }
 }

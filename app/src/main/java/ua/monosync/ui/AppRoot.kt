@@ -7,7 +7,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
 import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
@@ -162,7 +161,7 @@ fun AppRoot(vm: MainViewModel, deepLink: DeepLink?, onDeepLinkHandled: () -> Uni
             }
         },
     ) { padding ->
-        NavHost(nav, startDestination = "home", modifier = Modifier.padding(top = padding.calculateTopPadding())) {
+        NavHost(nav, startDestination = "home") {
             composable("home") {
                 HomeScreen(
                     settings = settings,
