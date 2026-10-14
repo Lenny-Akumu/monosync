@@ -32,7 +32,7 @@ object NotificationParser {
     private val balance = Regex("(?:Баланс|Залишок|Доступно)\\s*:?\\s*([+\\-−–]?)\\s?$NUM\\s?$CUR?", RegexOption.IGNORE_CASE)
     private val rateRx = Regex("Курс\\s*:?\\s*(\\d+(?:[.,]\\d+)?)\\s*$CUR?", RegexOption.IGNORE_CASE)
     private val cardRx = Regex(
-        "^(з|із|зі|на|до)\\s+(.+?)\\s+(картк[аиуі]|рахунк[уа]|рахунок)\\b.*$",
+        "^(з|із|зі|на|до)\\s+(.+?)\\s+(картк[аиуі]|рахунк[уа]|рахунок)(?:[\\s.,!].*)?$",
         setOf(RegexOption.IGNORE_CASE),
     )
     private val jarRx = Regex("^(з|із|зі|на|до|у|в)\\s+банк[иуа]\\s*[«\"“]?(.+?)[»\"”]?\\s*$", RegexOption.IGNORE_CASE)
