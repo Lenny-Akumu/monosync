@@ -1,6 +1,6 @@
 <resources>
     <string name="app_name">MonoSync</string>
     <string name="listener_label">MonoSync: облік операцій Monobank</string>
-    <string name="widget_label">Баланс MonoSync</string>
-    <string name="widget_description">Баланс основної картки та витрати за місяць</string>
+    <string name="widget_label">monosync</string>
+    <string name="widget_description">Баланс, витрати, операції, банки чи підписки на вибір, будь-якого розміру</string>
 </resources>

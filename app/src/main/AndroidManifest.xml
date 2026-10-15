@@ -46,6 +46,17 @@
                 android:value="conversations|alerting|silent|ongoing" />
         </service>
 
+        <activity
+            android:name=".widget.WidgetConfigActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:label="Налаштування віджета"
+            android:theme="@style/Theme.MonoSync">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
         <receiver
             android:name=".widget.BalanceWidgetReceiver"
             android:exported="false"

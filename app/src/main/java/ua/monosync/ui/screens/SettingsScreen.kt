@@ -147,7 +147,7 @@ fun SettingsScreen(
                 onClick = { onNotifyOnRecord(!settings.notifyOnRecord) },
             )
             GroupDivider()
-            SettingRow(Icons.Rounded.Widgets, "Віджет балансу", "Утримуй палець на головному екрані → Віджети → MonoSync")
+            SettingRow(Icons.Rounded.Widgets, "Віджети", "Утримуй палець на головному екрані → Віджети → monosync. Вміст і фон вибираються для кожного віджета")
         }
 
         SectionLabel("Надійність")
