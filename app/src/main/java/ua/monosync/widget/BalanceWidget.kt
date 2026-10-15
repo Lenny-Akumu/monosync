@@ -124,42 +124,61 @@ class BalanceWidget : GlanceAppWidget() {
     @Composable
     private fun Full(d: WidgetData, size: DpSize, p: Palette) {
         val short = size.height < 110.dp
+        val big = size.height >= 300.dp && size.width >= 240.dp
+        val cols = if (size.width >= 380.dp && size.height >= 200.dp) 2 else 1
+        val rowH = (if (big) 44 else 38) + (if (d.rows.any { it.progress != null }) 8 else 0)
         Column(GlanceModifier.fillMaxSize(), verticalAlignment = if (short) Alignment.CenterVertically else Alignment.Top) {
-            Line(d.label, p.muted, 12.sp)
+            Line(d.label, p.muted, if (big) 14.sp else 12.sp)
             Spacer(GlanceModifier.height(2.dp))
-            Line(d.headline, p.fg, if (short || size.width < 160.dp) 20.sp else 26.sp, bold = true)
+            Line(d.headline, p.fg, if (big) 36.sp else if (short || size.width < 160.dp) 20.sp else 26.sp, bold = true)
             d.caption?.takeIf { size.height >= 84.dp }?.let {
                 Spacer(GlanceModifier.height(2.dp))
-                Line(it, p.muted, 12.sp)
+                Line(it, p.muted, if (big) 14.sp else 12.sp)
             }
             d.progress?.takeIf { size.height >= 100.dp }?.let {
                 Spacer(GlanceModifier.height(6.dp))
                 Progress(it, p)
             }
             if (!short) {
-                val used = 110 + (if (d.progress != null) 10 else 0)
-                val room = ((size.height.value - used) / 38).toInt()
+                val used = (if (big) 140 else 110) + (if (d.progress != null) 10 else 0)
+                val room = ((size.height.value - used) / rowH).toInt() * cols
                 if (d.empty != null && d.rows.isEmpty()) {
                     Spacer(GlanceModifier.height(10.dp))
                     Line(d.empty, p.muted, 12.sp)
                 } else if (room > 0 && size.width >= 140.dp) {
-                    Spacer(GlanceModifier.height(10.dp))
-                    d.rows.take(room).forEach { RowItem(it, p, size.width >= 220.dp) }
+                    Spacer(GlanceModifier.height(if (big) 14.dp else 10.dp))
+                    val showSub = size.width / cols >= 200.dp
+                    Column(GlanceModifier.fillMaxWidth()) {
+                        d.rows.take(room).chunked(cols).chunked(8).forEach { block ->
+                            Column(GlanceModifier.fillMaxWidth()) {
+                                block.forEach { line ->
+                                    if (cols == 1) RowItem(line[0], p, showSub, big)
+                                    else Row(GlanceModifier.fillMaxWidth()) {
+                                        RowItem(line[0], p, showSub, big, GlanceModifier.defaultWeight())
+                                        Spacer(GlanceModifier.width(16.dp))
+                                        line.getOrNull(1)?.let { RowItem(it, p, showSub, big, GlanceModifier.defaultWeight()) }
+                                            ?: Spacer(GlanceModifier.defaultWeight())
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 
     @Composable
-    private fun RowItem(r: WidgetRow, p: Palette, showSub: Boolean) {
-        Column(GlanceModifier.fillMaxWidth().padding(vertical = 3.dp)) {
+    private fun RowItem(r: WidgetRow, p: Palette, showSub: Boolean, big: Boolean, modifier: GlanceModifier = GlanceModifier.fillMaxWidth()) {
+        val fs = if (big) 15.sp else 13.sp
+        Column(modifier.padding(vertical = if (big) 5.dp else 3.dp)) {
             Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(GlanceModifier.defaultWeight()) {
-                    Line(r.title, p.fg, 13.sp)
-                    r.sub?.takeIf { showSub && it.isNotBlank() }?.let { Line(it, p.muted, 10.sp) }
+                    Line(r.title, p.fg, fs)
+                    r.sub?.takeIf { showSub && it.isNotBlank() }?.let { Line(it, p.muted, if (big) 12.sp else 10.sp) }
                 }
                 Spacer(GlanceModifier.width(8.dp))
-                Line(r.value, if (r.positive) p.accent else p.fg, 13.sp, bold = true)
+                Line(r.value, if (r.positive) p.accent else p.fg, fs, bold = true)
             }
             r.progress?.let {
                 Spacer(GlanceModifier.height(3.dp))

@@ -103,7 +103,7 @@ object WidgetLoader {
                     headline = a.balance?.let { Money.format(it + a.creditLimit, a.cur) } ?: "—",
                     short = a.balance?.let { Money.formatShort(it + a.creditLimit, a.cur) } ?: "—",
                     caption = caption,
-                    rows = month.filter { it.accountId == a.id }.take(6).map { txRow(it, catNames, zone, today) },
+                    rows = month.filter { it.accountId == a.id }.take(40).map { txRow(it, catNames, zone, today) },
                 )
             }
 
@@ -138,7 +138,10 @@ object WidgetLoader {
                         WidgetRow("Сьогодні", Money.formatShort(inMain.filter { it.time >= dayStart }.sumOf { -it.amount }, main.first)),
                         WidgetRow("За 7 днів", Money.formatShort(inMain.filter { it.time >= weekStart }.sumOf { -it.amount }, main.first)),
                         WidgetRow("В середньому за день", Money.formatShort(main.second / today.dayOfMonth, main.first)),
-                    ) + sums.drop(1).map { WidgetRow("У ${it.first.code}", Money.formatShort(it.second, it.first)) },
+                    ) + sums.drop(1).map { WidgetRow("У ${it.first.code}", Money.formatShort(it.second, it.first)) } +
+                        inMain.groupBy { it.categoryId }.mapValues { (_, l) -> l.sumOf { -it.amount } }.toList()
+                            .sortedByDescending { it.second }
+                            .map { (id, v) -> WidgetRow(catNames[id] ?: "Інше", Money.formatShort(v, main.first), progress = v.toFloat() / main.second.coerceAtLeast(1)) },
                 )
             }
 
@@ -157,7 +160,7 @@ object WidgetLoader {
             }
 
             WidgetMode.RECENT -> {
-                val tx = repo.db.transactions().observeRecent(60).first().filter(scope).take(12)
+                val tx = repo.db.transactions().observeRecent(200).first().filter(scope).take(50)
                 val last = tx.firstOrNull()
                 WidgetData(
                     label = if (accountId == ALL_ACCOUNTS) "Останні операції" else scopeName,
