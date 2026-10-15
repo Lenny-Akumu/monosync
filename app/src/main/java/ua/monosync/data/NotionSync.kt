@@ -339,7 +339,7 @@ class NotionSync(private val repo: Repository) {
             val fresh = repo.mono.rates().map { Rate(it.currencyCodeA, it.currencyCodeB, it.rateBuy, it.rateSell, it.rateCross) }
             Rates(System.currentTimeMillis(), fresh).also { settings.setRates(it) }
         } catch (e: Exception) {
-            cached ?: Rates(0, listOf(Rate(978, 980, cross = 48.0), Rate(840, 980, cross = 41.5)))
+            cached ?: Rates(0, listOf(Rate(978, 980, cross = 48.0), Rate(840, 980, cross = 41.5), Rate(578, 980, cross = 3.9)))
         }
     }
 

@@ -27,6 +27,7 @@ import ua.monosync.data.db.JAR_TYPE
 import ua.monosync.data.db.cur
 import ua.monosync.data.db.isJar
 import ua.monosync.data.remote.MonoAccount
+import ua.monosync.data.remote.EnableBankingApi
 import ua.monosync.data.remote.MonoApi
 import ua.monosync.data.remote.MonoJar
 import ua.monosync.data.remote.MonoStatementItem
@@ -44,6 +45,8 @@ class Repository(
     val secrets: Secrets,
 ) {
     val mono = MonoApi { secrets.monoToken.value }
+    val eb = EnableBankingApi({ ebAppId }, { secrets.ebKey.value })
+    @Volatile var ebAppId: String? = null
     private val lock = Mutex()
 
     val accounts: Flow<List<AccountEntity>> = db.accounts().observeAll()
@@ -517,6 +520,103 @@ class Repository(
         val id = db.transactions().insert(tx)
         if (id > 0) mergeOwnTransfer(tx.copy(id = id))
         return id > 0
+    }
+
+    // Enable Banking (European banks over PSD2)
+
+    data class EbConnectResult(val newAccounts: List<AccountEntity>)
+
+    suspend fun ebConnect(code: String): EbConnectResult {
+        val s = settings.current()
+        ebAppId = s.eb.appId
+        val session = eb.createSession(code)
+        secrets.ebSession.value?.let { old -> if (old != session.id) eb.deleteSession(old) }
+        secrets.setEbSession(session.id)
+        settings.updateEb { it.copy(validUntil = session.validUntil, lastError = null, pendingState = null) }
+        val known = db.accounts().all().associateBy { it.id }
+        val fresh = mutableListOf<AccountEntity>()
+        session.accounts.forEachIndexed { i, a ->
+            val id = "eb:" + a.uid
+            val currency = Currency.byCode(a.currency) ?: Currency.byCode("NOK") ?: Currency.EUR
+            val existing = known[id]
+            if (existing == null) {
+                val tail = a.iban?.takeLast(4)
+                val entity = AccountEntity(
+                    id = id,
+                    name = a.name?.takeIf { it.isNotBlank() } ?: listOfNotNull(s.eb.aspspName.ifBlank { null }, tail?.let { "••$it" }).joinToString(" "),
+                    cardKey = id,
+                    currency = currency.iso,
+                    maskedPan = tail,
+                    iban = a.iban,
+                    fromApi = true,
+                    sortOrder = 200 + i,
+                )
+                db.accounts().upsert(entity)
+                fresh += entity
+            }
+        }
+        return EbConnectResult(fresh)
+    }
+
+    /** Pulls balances and booked transactions of every linked European account. */
+    suspend fun ebSync(full: Boolean = false): Int = lock.withLock {
+        val s = settings.current()
+        ebAppId = s.eb.appId
+        if (secrets.ebSession.value == null) return 0
+        if (s.eb.validUntil in 1 until System.currentTimeMillis()) {
+            settings.updateEb { it.copy(lastError = "Доступ до банку закінчився, увійди ще раз через BankID") }
+            return 0
+        }
+        val zone = ZoneId.systemDefault()
+        var created = 0
+        val accounts = db.accounts().all().filter { it.id.startsWith("eb:") && !it.hidden }
+        for (acc in accounts) {
+            val uid = acc.id.removePrefix("eb:")
+            eb.balance(uid)?.let { b -> db.accounts().upsert(acc.copy(balance = b.amountMinor, updatedAt = System.currentTimeMillis())) }
+            val since = if (full || acc.lastStatementAt == 0L) System.currentTimeMillis() - s.historyDays * day
+            else acc.lastStatementAt - 5 * day
+            val dateFrom = Instant.ofEpochMilli(since).atZone(zone).toLocalDate().toString()
+            for (t in eb.transactions(uid, dateFrom)) {
+                if (!t.booked) continue
+                val date = t.date?.let { runCatching { LocalDate.parse(it.take(10)) }.getOrNull() } ?: continue
+                val time = date.atTime(12, 0).atZone(zone).toInstant().toEpochMilli()
+                val description = (t.counterparty ?: t.remittance ?: if (t.credit) "Надходження" else "Списання").take(120)
+                val extId = "eb:" + (t.id ?: sha("$uid|${t.date}|${t.amountMinor}|${t.credit}|$description"))
+                val kind = if (t.credit) Kind.INCOME else Kind.EXPENSE
+                val fresh = db.accounts().byId(acc.id) ?: acc
+                val id = db.transactions().insert(
+                    TransactionEntity(
+                        monoId = extId,
+                        accountId = acc.id,
+                        time = time,
+                        amount = if (t.credit) t.amountMinor else -t.amountMinor,
+                        currency = acc.currency,
+                        description = description,
+                        mcc = t.mcc,
+                        categoryId = if (kind == Kind.EXPENSE) pickCategory(description, t.mcc) else null,
+                        kind = kind,
+                        balanceAfter = t.balanceAfterMinor,
+                        comment = t.remittance?.takeIf { it != description },
+                        source = Source.API,
+                        syncState = initialSyncState(fresh, time, s),
+                    )
+                )
+                if (id > 0) {
+                    created++
+                    db.transactions().byId(id)?.let { mergeOwnTransfer(it) }
+                }
+            }
+            db.accounts().byId(acc.id)?.let { db.accounts().upsert(it.copy(lastStatementAt = System.currentTimeMillis())) }
+        }
+        settings.updateEb { it.copy(lastSync = System.currentTimeMillis(), lastError = null) }
+        created
+    }
+
+    suspend fun ebDisconnect() {
+        settings.current().eb.appId.let { ebAppId = it }
+        secrets.ebSession.value?.let { eb.deleteSession(it) }
+        secrets.setEbSession(null)
+        settings.updateEb { it.copy(validUntil = 0, lastSync = 0, lastError = null) }
     }
 
     // Subscriptions

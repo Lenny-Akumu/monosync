@@ -309,6 +309,79 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setSubReminders(on: Boolean) = viewModelScope.launch { repo.settings.setSubReminders(on) }
     fun setSubRemindDays(days: Int) = viewModelScope.launch { repo.settings.setSubRemindDays(days) }
 
+    // Enable Banking
+
+    val ebKey = repo.secrets.ebKey
+    val ebSession = repo.secrets.ebSession
+    val ebRunning: StateFlow<Boolean> = SyncScheduler.observeEb(app)
+        .map { list -> list.any { it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    private val _aspsps = MutableStateFlow<List<ua.monosync.data.remote.EbAspsp>>(emptyList())
+    val aspsps: StateFlow<List<ua.monosync.data.remote.EbAspsp>> = _aspsps.asStateFlow()
+
+    private val _ebAuthUrl = MutableStateFlow<String?>(null)
+    val ebAuthUrl: StateFlow<String?> = _ebAuthUrl.asStateFlow()
+
+    fun setMonoEnabled(v: Boolean) = viewModelScope.launch { repo.settings.setMonoEnabled(v) }
+
+    fun setEbAppId(id: String) = viewModelScope.launch { repo.settings.updateEb { it.copy(appId = id.trim()) } }
+    fun setEbRedirect(url: String) = viewModelScope.launch { repo.settings.updateEb { it.copy(redirectUrl = url.trim()) } }
+
+    fun setEbBank(name: String, country: String) = viewModelScope.launch {
+        repo.settings.updateEb { it.copy(aspspName = name, aspspCountry = country) }
+    }
+
+    fun importEbKey(pem: String) {
+        try {
+            ua.monosync.data.remote.EnableBankingApi.privateKey(pem)
+            repo.secrets.setEbKey(pem)
+            _message.value = "Ключ завантажено"
+        } catch (e: Exception) {
+            _message.value = e.message ?: "Не вдалося прочитати ключ"
+        }
+    }
+
+    fun loadAspsps(country: String) = work("Завантажую банки…") {
+        repo.ebAppId = repo.settings.current().eb.appId
+        _aspsps.value = repo.eb.aspsps(country)
+    }
+
+    fun startEbAuth(bank: String, country: String) = work("Готую вхід у банк…") {
+        repo.settings.updateEb { it.copy(aspspName = bank, aspspCountry = country) }
+        val cfg = repo.settings.current().eb
+        repo.ebAppId = cfg.appId
+        require(cfg.aspspName.isNotBlank()) { "Спершу вибери банк" }
+        val max = runCatching { repo.eb.aspsps(cfg.aspspCountry).firstOrNull { it.name == cfg.aspspName }?.maxConsentSeconds }.getOrNull()
+        val state = java.util.UUID.randomUUID().toString()
+        repo.settings.updateEb { it.copy(pendingState = state) }
+        _ebAuthUrl.value = repo.eb.startAuth(cfg.aspspName, cfg.aspspCountry, cfg.redirectUrl, state, max)
+    }
+
+    fun closeEbAuth() { _ebAuthUrl.value = null }
+
+    fun finishEbAuth(urlOrCode: String) = work("Підключаю рахунки…") {
+        _ebAuthUrl.value = null
+        val input = urlOrCode.trim()
+        ua.monosync.data.remote.EnableBankingApi.errorFrom(input)?.let { throw IllegalStateException("Банк повернув помилку: $it") }
+        val code = ua.monosync.data.remote.EnableBankingApi.codeFrom(input) ?: input.takeIf { !it.contains("://") && it.length > 10 }
+            ?: throw IllegalStateException("У посиланні немає коду авторизації")
+        val result = repo.ebConnect(code)
+        result.newAccounts.forEach { ua.monosync.sync.Notifier.newAccount(app, it) }
+        SyncScheduler.ebNow(app, full = true)
+        _message.value = "Банк підключено, рахунків: ${result.newAccounts.size}. Підтвердь їх на головному екрані"
+    }
+
+    fun syncEb() {
+        SyncScheduler.ebNow(app)
+        _message.value = "Синхронізація з банком запущена"
+    }
+
+    fun disconnectEb() = work("Відключаю банк…") {
+        repo.ebDisconnect()
+        _message.value = "Банк відключено"
+    }
+
     fun deleteRule(pattern: String) = viewModelScope.launch { repo.db.rules().delete(pattern) }
     fun clearLog() = viewModelScope.launch { repo.db.raw().clear() }
 

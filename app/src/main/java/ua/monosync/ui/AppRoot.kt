@@ -48,6 +48,9 @@ import ua.monosync.data.db.Source
 import ua.monosync.data.db.TransactionEntity
 import ua.monosync.ui.components.FitText
 import ua.monosync.ui.screens.AccountDialog
+import ua.monosync.ui.screens.BanksScreen
+import ua.monosync.ui.screens.EbScreen
+import ua.monosync.ui.screens.bankPresets
 import ua.monosync.ui.screens.AccountsScreen
 import ua.monosync.ui.screens.AnalyticsScreen
 import ua.monosync.ui.screens.CategoriesScreen
@@ -184,7 +187,7 @@ fun AppRoot(vm: MainViewModel, deepLink: DeepLink?, onDeepLinkHandled: () -> Uni
                     onOpenAccount = { openAccount = it },
                     onOpenTx = { openTx = it },
                     onOpenNotion = { go("notion") },
-                    onOpenMono = { go("mono") },
+                    onOpenMono = { go("banks") },
                     onSeeAll = { go("transactions") },
                     subscriptions = subscriptions,
                     onOpenSubscriptions = { go("subscriptions") },
@@ -211,7 +214,7 @@ fun AppRoot(vm: MainViewModel, deepLink: DeepLink?, onDeepLinkHandled: () -> Uni
                     accountsCount = accounts.size,
                     contentPadding = padding,
                     onGrantListener = grantListener,
-                    onMono = { go("mono") },
+                    onMono = { go("banks") },
                     onNotion = { go("notion") },
                     onAccounts = { go("accounts") },
                     onCategories = { go("categories") },
@@ -275,6 +278,48 @@ fun AppRoot(vm: MainViewModel, deepLink: DeepLink?, onDeepLinkHandled: () -> Uni
                     onCreate = { name, budget, group -> vm.createCategory(name, budget, group) },
                     onUpdate = { vm.updateCategory(it) },
                     onDelete = { vm.deleteCategory(it) },
+                )
+            }
+            composable("banks") {
+                val ebSession by vm.ebSession.collectAsStateWithLifecycle()
+                BanksScreen(
+                    settings = settings,
+                    monoConnected = monoToken != null,
+                    ebConnected = ebSession != null,
+                    onBack = { nav.popBackStack() },
+                    onMonoEnabled = { vm.setMonoEnabled(it) },
+                    onOpenMono = { go("mono") },
+                    onOpenEb = { go("eb/" + (it?.key ?: "other")) },
+                )
+            }
+            composable("eb/{bank}") { entry ->
+                val key = entry.arguments?.getString("bank")
+                val preset = bankPresets.firstOrNull { it.key == key && it.aspsp != null }
+                val ebSession by vm.ebSession.collectAsStateWithLifecycle()
+                val ebKey by vm.ebKey.collectAsStateWithLifecycle()
+                val ebRunning by vm.ebRunning.collectAsStateWithLifecycle()
+                val aspsps by vm.aspsps.collectAsStateWithLifecycle()
+                val authUrl by vm.ebAuthUrl.collectAsStateWithLifecycle()
+                EbScreen(
+                    settings = settings,
+                    preset = preset,
+                    hasKey = ebKey != null,
+                    connected = ebSession != null,
+                    running = ebRunning,
+                    busy = busy,
+                    aspsps = aspsps,
+                    authUrl = authUrl,
+                    onBack = { nav.popBackStack() },
+                    onAppId = { vm.setEbAppId(it) },
+                    onRedirect = { vm.setEbRedirect(it) },
+                    onImportKey = { vm.importEbKey(it) },
+                    onLoadAspsps = { vm.loadAspsps(it) },
+                    onBank = { name, country -> vm.setEbBank(name, country) },
+                    onLogin = { name, country -> vm.startEbAuth(name, country) },
+                    onAuthResult = { vm.finishEbAuth(it) },
+                    onCloseAuth = { vm.closeEbAuth() },
+                    onSync = { vm.syncEb() },
+                    onDisconnect = { vm.disconnectEb() },
                 )
             }
             composable("subscriptions") {

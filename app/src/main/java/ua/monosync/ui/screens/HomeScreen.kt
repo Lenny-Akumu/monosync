@@ -150,7 +150,7 @@ fun HomeScreen(
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = contentPadding.calculateBottomPadding() + 96.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            if (!listenerEnabled) {
+            if (!listenerEnabled && settings.monoEnabled) {
                 item {
                     ActionCard(
                         icon = Icons.Rounded.NotificationsActive,
@@ -196,7 +196,7 @@ fun HomeScreen(
             }
             if (visible.isEmpty() && jars.isEmpty() && unconfirmed.isEmpty()) {
                 item {
-                    EmptyHero(monoConnected, onOpenMono)
+                    EmptyHero(monoConnected && settings.monoEnabled, onOpenMono, settings.monoEnabled)
                     Spacer(Modifier.height(12.dp))
                 }
             }
@@ -408,18 +408,21 @@ fun ActionCard(
 }
 
 @Composable
-private fun EmptyHero(monoConnected: Boolean, onOpenMono: () -> Unit) {
+private fun EmptyHero(monoConnected: Boolean, onOpenBanks: () -> Unit, monoEnabled: Boolean) {
     val scheme = MaterialTheme.colorScheme
     Surface(shape = RoundedCornerShape(32.dp), color = scheme.primaryContainer, contentColor = scheme.onPrimaryContainer) {
         Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Привіт!", style = MaterialTheme.typography.headlineSmall)
             Text(
-                if (monoConnected) "Підтягую картки з Monobank…"
-                else "Картки з'являться після першого сповіщення від Mono. Або підключи токен Monobank, щоб одразу бачити всі баланси.",
+                when {
+                    monoConnected -> "Підтягую рахунки з банку…"
+                    monoEnabled -> "Картки з'являться після першого сповіщення від Mono. Або підключи свій банк, щоб одразу бачити всі баланси."
+                    else -> "Підключи свій банк у налаштуваннях, і рахунки з'являться тут."
+                },
                 style = MaterialTheme.typography.bodyMedium,
             )
             if (!monoConnected) {
-                FilledTonalButton(onClick = onOpenMono, modifier = Modifier.align(Alignment.End)) { Text("Підключити Monobank") }
+                FilledTonalButton(onClick = onOpenBanks, modifier = Modifier.align(Alignment.End)) { Text("Вибрати банк") }
             }
         }
     }

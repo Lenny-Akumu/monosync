@@ -49,6 +49,20 @@ data class NotionConfig(
 )
 
 @Serializable
+data class EbConfig(
+    val appId: String = "",
+    val redirectUrl: String = DEFAULT_EB_REDIRECT,
+    val aspspName: String = "",
+    val aspspCountry: String = "",
+    val validUntil: Long = 0,
+    val lastSync: Long = 0,
+    val lastError: String? = null,
+    val pendingState: String? = null,
+)
+
+const val DEFAULT_EB_REDIRECT = "https://lenny-akumu.github.io/monosync/"
+
+@Serializable
 data class NotionAccount(val id: String, val name: String)
 
 @Serializable
@@ -75,6 +89,8 @@ data class AppSettings(
     val historyDays: Int = 7,
     val subRemindersOn: Boolean = true,
     val subRemindDays: Int = 3,
+    val monoEnabled: Boolean = true,
+    val eb: EbConfig = EbConfig(),
 )
 
 class Settings(private val context: Context) {
@@ -99,6 +115,8 @@ class Settings(private val context: Context) {
         val historyDays = longPreferencesKey("history_days")
         val subRemindersOn = booleanPreferencesKey("sub_reminders_on")
         val subRemindDays = longPreferencesKey("sub_remind_days")
+        val monoEnabled = booleanPreferencesKey("mono_enabled")
+        val eb = stringPreferencesKey("eb_config")
     }
 
     val flow: Flow<AppSettings> = context.dataStore.data.map { p -> read(p) }
@@ -124,6 +142,8 @@ class Settings(private val context: Context) {
         historyDays = (p[K.historyDays] ?: 7L).toInt(),
         subRemindersOn = p[K.subRemindersOn] ?: true,
         subRemindDays = (p[K.subRemindDays] ?: 3L).toInt(),
+        monoEnabled = p[K.monoEnabled] ?: true,
+        eb = p[K.eb]?.let { runCatching { json.decodeFromString<EbConfig>(it) }.getOrNull() } ?: EbConfig(),
     )
 
     suspend fun setNotionEnabled(v: Boolean) = context.dataStore.edit {
@@ -168,6 +188,13 @@ class Settings(private val context: Context) {
     suspend fun setNotifyOnRecord(v: Boolean) = context.dataStore.edit { it[K.notifyOnRecord] = v }
     suspend fun setHistoryDays(v: Int) = context.dataStore.edit { it[K.historyDays] = v.toLong() }
 
+    suspend fun setMonoEnabled(v: Boolean) = context.dataStore.edit { it[K.monoEnabled] = v }
+
+    suspend fun updateEb(change: (EbConfig) -> EbConfig) = context.dataStore.edit { p ->
+        val cur = p[K.eb]?.let { runCatching { json.decodeFromString<EbConfig>(it) }.getOrNull() } ?: EbConfig()
+        p[K.eb] = json.encodeToString(change(cur))
+    }
+
     suspend fun setSubReminders(on: Boolean) = context.dataStore.edit { it[K.subRemindersOn] = on }
     suspend fun setSubRemindDays(days: Int) = context.dataStore.edit { it[K.subRemindDays] = days.toLong() }
 
@@ -195,6 +222,21 @@ class Secrets(context: Context) {
     fun setMonoToken(v: String?) {
         prefs.edit().apply { if (v.isNullOrBlank()) remove("mono") else putString("mono", v.trim()) }.apply()
         _monoToken.value = v?.trim()?.takeIf { it.isNotEmpty() }
+    }
+
+    private val _ebKey = MutableStateFlow(prefs.getString("eb_key", null))
+    private val _ebSession = MutableStateFlow(prefs.getString("eb_session", null))
+    val ebKey: StateFlow<String?> = _ebKey.asStateFlow()
+    val ebSession: StateFlow<String?> = _ebSession.asStateFlow()
+
+    fun setEbKey(v: String?) {
+        prefs.edit().apply { if (v.isNullOrBlank()) remove("eb_key") else putString("eb_key", v.trim()) }.apply()
+        _ebKey.value = v?.trim()?.takeIf { it.isNotEmpty() }
+    }
+
+    fun setEbSession(v: String?) {
+        prefs.edit().apply { if (v.isNullOrBlank()) remove("eb_session") else putString("eb_session", v) }.apply()
+        _ebSession.value = v?.takeIf { it.isNotEmpty() }
     }
 
     fun setNotionToken(v: String?) {

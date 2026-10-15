@@ -34,6 +34,11 @@ object SyncScheduler {
             PeriodicWorkRequestBuilder<MonoWorker>(30, TimeUnit.MINUTES).setConstraints(network).build(),
         )
         wm.enqueueUniquePeriodicWork(
+            "eb_periodic",
+            ExistingPeriodicWorkPolicy.KEEP,
+            PeriodicWorkRequestBuilder<EbWorker>(30, TimeUnit.MINUTES).setConstraints(network).build(),
+        )
+        wm.enqueueUniquePeriodicWork(
             "subscriptions_periodic",
             ExistingPeriodicWorkPolicy.KEEP,
             PeriodicWorkRequestBuilder<SubscriptionWorker>(6, TimeUnit.HOURS).build(),
@@ -60,6 +65,17 @@ object SyncScheduler {
         WorkManager.getInstance(context).enqueueUniqueWork(NOTION_NOW, ExistingWorkPolicy.APPEND_OR_REPLACE, req)
     }
 
+    fun ebNow(context: Context, full: Boolean = false) {
+        val req = OneTimeWorkRequestBuilder<EbWorker>()
+            .setConstraints(network)
+            .setInputData(workDataOf("full" to full))
+            .setBackoffCriteria(BackoffPolicy.LINEAR, 60, TimeUnit.SECONDS)
+            .build()
+        WorkManager.getInstance(context).enqueueUniqueWork("eb_now", ExistingWorkPolicy.REPLACE, req)
+    }
+
+    fun observeEb(context: Context) = WorkManager.getInstance(context).getWorkInfosForUniqueWorkFlow("eb_now")
+
     fun observeMono(context: Context) = WorkManager.getInstance(context).getWorkInfosForUniqueWorkFlow(MONO_NOW)
     fun observeNotion(context: Context) = WorkManager.getInstance(context).getWorkInfosForUniqueWorkFlow(NOTION_NOW)
 }
@@ -77,7 +93,8 @@ class MonoWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                 repo.syncClientInfo().forEach { Notifier.newAccount(applicationContext, it) }
             }
             val full = inputData.getBoolean("full", false)
-            val accounts = repo.db.accounts().all().filter { it.fromApi && !it.hidden && (only == null || it.id == only) }
+            val accounts = repo.db.accounts().all()
+                .filter { it.fromApi && !it.hidden && !it.id.startsWith("eb:") && (only == null || it.id == only) }
             val historyStart = System.currentTimeMillis() - s.historyDays * 24 * 3600_000L
             accounts.forEachIndexed { i, acc ->
                 if (i > 0) delay(61_000)
@@ -132,5 +149,26 @@ suspend fun afterNewCharges(context: Context) {
     runCatching {
         repo.refreshSubscriptions()
         repo.dueReminders().forEach { (sub, days) -> Notifier.subscriptionDue(context, sub, days) }
+    }
+}
+
+class EbWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+    override suspend fun doWork(): Result {
+        val repo = applicationContext.app.repo
+        if (repo.secrets.ebSession.value == null) return Result.success()
+        return try {
+            repo.ebSync(full = inputData.getBoolean("full", false))
+            afterNewCharges(applicationContext)
+            BalanceWidget.refresh(applicationContext)
+            SyncScheduler.notionNow(applicationContext)
+            Result.success()
+        } catch (e: ApiException) {
+            val msg = if (e.code == 401 || e.code == 403) "Банк відхилив доступ. Увійди ще раз через BankID" else e.message
+            repo.settings.updateEb { it.copy(lastError = msg) }
+            if (e.code == 429 && runAttemptCount < 3) Result.retry() else Result.failure()
+        } catch (e: Exception) {
+            repo.settings.updateEb { it.copy(lastError = e.message ?: e.javaClass.simpleName) }
+            if (runAttemptCount < 3) Result.retry() else Result.failure()
+        }
     }
 }

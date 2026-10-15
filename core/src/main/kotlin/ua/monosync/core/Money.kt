@@ -12,7 +12,11 @@ enum class Currency(val iso: Int, val code: String, val symbol: String) {
     EUR(978, "EUR", "€"),
     USD(840, "USD", "$"),
     GBP(826, "GBP", "£"),
-    PLN(985, "PLN", "zł");
+    PLN(985, "PLN", "zł"),
+    NOK(578, "NOK", "kr"),
+    SEK(752, "SEK", "kr"),
+    DKK(208, "DKK", "kr"),
+    CHF(756, "CHF", "CHF");
 
     companion object {
         fun byIso(iso: Int?): Currency? = entries.firstOrNull { it.iso == iso }
@@ -26,6 +30,10 @@ enum class Currency(val iso: Int, val code: String, val symbol: String) {
                 "$", "usd" -> USD
                 "£", "gbp" -> GBP
                 "zł", "pln" -> PLN
+                "nok" -> NOK
+                "sek" -> SEK
+                "dkk" -> DKK
+                "chf" -> CHF
                 else -> null
             }
         }

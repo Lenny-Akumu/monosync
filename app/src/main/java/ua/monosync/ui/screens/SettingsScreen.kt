@@ -92,12 +92,11 @@ fun SettingsScreen(
             GroupDivider()
             SettingRow(
                 Icons.Rounded.AccountBalance,
-                "Monobank API",
-                when {
-                    !monoConnected -> "Не підключено. Баланси й MCC-категорії з банку"
-                    settings.monoLastError != null -> "Помилка: ${settings.monoLastError}"
-                    else -> "Підключено" + (settings.monoClientName?.let { " · $it" } ?: "")
-                },
+                "Банки",
+                listOfNotNull(
+                    if (settings.monoEnabled) "\uD83C\uDDFA\uD83C\uDDE6 Monobank" + (if (monoConnected) " · API" else "") else null,
+                    settings.eb.aspspName.takeIf { it.isNotBlank() && settings.eb.lastSync > 0 }?.let { "${flag(settings.eb.aspspCountry)} $it" },
+                ).joinToString(" · ").ifBlank { "Вибери свій банк" },
                 trailing = chevron,
                 onClick = onMono,
             )
